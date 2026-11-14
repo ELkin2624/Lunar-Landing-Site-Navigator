@@ -54,6 +54,30 @@ def test_ephemeris_cache_sqlite(tmp_path: Path):
     assert cache.count() == 0
 
 
+def test_catalog_coordinates_follow_iau_gazetteer():
+    # Center coordinates from https://planetarynames.wr.usgs.gov (planetographic, +East).
+    official = {
+        "mouton": (-84.60, 31.00),
+        "malapert": (-85.98, -1.67),
+        "haworth": (-87.45, -5.17),
+        "shackleton-floor": (-89.67, 129.78),
+        "nobile": (-85.28, 53.27),
+        "faustini": (-87.18, 84.31),
+        "amundsen": (-84.44, 83.07),
+    }
+    for site_id, (lat, lon) in official.items():
+        site = find_site(site_id)
+        assert site is not None, site_id
+        assert (site.latitude_deg, site.longitude_deg) == (lat, lon)
+        assert site.coordinate_source.startswith("IAU")
+    for site in list_sites():
+        assert site.coordinate_source
+        if not site.coordinate_source.startswith("IAU"):
+            assert site.coordinate_source.startswith("Aproximada")
+    # Leibnitz Beta is the former name of Mons Mouton, not a separate site.
+    assert find_site("leibnitz-beta") is None
+
+
 def test_catalog_sites():
     sites = list_sites()
     assert len(sites) >= 10
@@ -64,7 +88,7 @@ def test_catalog_sites():
     mouton = find_site("mouton")
     assert mouton is not None
     assert mouton.name == "Mons Mouton"
-    assert mouton.latitude_deg == -85.4
+    assert mouton.latitude_deg == -84.60
 
     query_res = list_sites(query="Malapert")
     assert len(query_res) == 1

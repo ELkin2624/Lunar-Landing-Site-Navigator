@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.analysis import analyze, apply_refined_events, build_timeline, horizon_at
 from app.horizons import HorizonsError, parse_ephemeris
 from app.main import app
-from app.models import BodyPosition, HorizonPoint, Sample, Scenario, Site
+from app.models import BodyPosition, HorizonPoint, Sample, Scenario, Site, TerrainRequest
 from app.terrain import LolaDem, _destination, horizon_profile
 from app.transitions import effective_step_minutes
 
@@ -84,6 +84,36 @@ def test_lola_projection_and_curved_horizon(tmp_path: Path):
         assert site_height_km == 0.002
         assert profile[0].elevation_deg > 45
         assert profile[18].elevation_deg < 0
+
+
+def test_distant_massif_beyond_100_km_raises_the_skyline(tmp_path: Path):
+    # Near the pole, massifs 100-200 km away can rise above the 1-2° solar path.
+    image = synthetic_dem(tmp_path)
+    site = Site(latitude_deg=-89.5, longitude_deg=0)
+    with LolaDem(image) as dem:
+        ridge_lat, _ = _destination(site.latitude_deg, site.longitude_deg, 0, 150_000)
+        rho = 2 * dem.radius_m * math.tan(math.radians(90 + ridge_lat) / 2)
+        row = round((dem.size - 1) / 2 - rho / dem.scale_m)
+        col = round((dem.size - 1) / 2)
+    with image.open("r+b") as output:
+        output.seek(2 * (row * 3812 + col))
+        output.write(struct.pack("<h", 16000))
+    with LolaDem(image) as dem:
+        near, _ = horizon_profile(dem, site, max_distance_km=100, azimuth_step_deg=10)
+        far, _ = horizon_profile(dem, site, azimuth_step_deg=10)
+        assert near[0].elevation_deg < 0
+        assert far[0].elevation_deg > 0.3
+        assert far[18].elevation_deg < 0
+
+
+def test_horizon_range_defaults_reach_distant_terrain():
+    site = {"latitude_deg": -89.5, "longitude_deg": 0}
+    assert TerrainRequest(site=site).max_distance_km == 250
+    assert TerrainRequest(site=site, max_distance_km=300).max_distance_km == 300
+    with pytest.raises(ValueError):
+        TerrainRequest(site=site, max_distance_km=301)
+    scenario = Scenario(site=site, start_utc="2026-11-15T00:00:00Z", end_utc="2026-11-15T03:00:00Z")
+    assert scenario.max_horizon_distance_km == 250
 
 
 def test_evaluate_with_dem(monkeypatch, tmp_path):

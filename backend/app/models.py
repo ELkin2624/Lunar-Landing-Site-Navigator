@@ -34,7 +34,7 @@ class Scenario(BaseModel):
     horizon_profile: list[HorizonPoint] | None = None
     use_dem_horizon: bool = False
     observer_height_m: float = Field(default=2, ge=0, le=100)
-    max_horizon_distance_km: float = Field(default=50, ge=1, le=100)
+    max_horizon_distance_km: float = Field(default=250, ge=1, le=300)
     constraints: Constraints = Field(default_factory=Constraints)
 
     @field_validator("start_utc", "end_utc")
@@ -147,7 +147,7 @@ class ScenarioResult(BaseModel):
 class TerrainRequest(BaseModel):
     site: Site
     observer_height_m: float = Field(default=2, ge=0, le=100)
-    max_distance_km: float = Field(default=50, ge=1, le=100)
+    max_distance_km: float = Field(default=250, ge=1, le=300)
     azimuth_step_deg: int = Field(default=1)
 
     @field_validator("azimuth_step_deg")
@@ -177,7 +177,7 @@ class LegacyAnalyzeRequest(BaseModel):
     step_minutes: int = Field(default=60, ge=15, le=1440)
     use_dem_horizon: bool = False
     observer_height_m: float = Field(default=2, ge=0, le=100)
-    max_horizon_distance_km: float = Field(default=50, ge=1, le=100)
+    max_horizon_distance_km: float = Field(default=250, ge=1, le=300)
     min_earth_elevation_deg: float = Field(default=0, ge=0, le=90)
 
     @field_validator("start_time")
