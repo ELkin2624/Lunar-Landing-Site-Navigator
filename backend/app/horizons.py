@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import httpx
 
+from .cache import EphemerisCache
 from .models import Site
 
 HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
@@ -33,10 +34,24 @@ def parse_ephemeris(result: str) -> list[tuple[datetime, float, float]]:
 
 
 class HorizonsClient:
-    def __init__(self, client: httpx.AsyncClient):
+    def __init__(self, client: httpx.AsyncClient, cache: EphemerisCache | None = None):
         self.client = client
+        self.cache = cache
 
     async def positions(self, body_id: int, site: Site, start: datetime, end: datetime, step_minutes: int) -> list[tuple[datetime, float, float]]:
+        if self.cache is not None:
+            cached = self.cache.get(
+                body_id=body_id,
+                lat=site.latitude_deg,
+                lon=site.longitude_deg,
+                height_km=site.height_km,
+                start=start,
+                end=end,
+                step_minutes=step_minutes,
+            )
+            if cached is not None:
+                return cached
+
         params = {
             "format": "json",
             "COMMAND": f"'{body_id}'",
@@ -63,4 +78,17 @@ class HorizonsClient:
             raise HorizonsError("Could not retrieve JPL Horizons ephemeris") from exc
         if "error" in payload:
             raise HorizonsError(str(payload["error"])[:500])
-        return parse_ephemeris(payload.get("result", ""))
+
+        rows = parse_ephemeris(payload.get("result", ""))
+        if self.cache is not None:
+            self.cache.set(
+                body_id=body_id,
+                lat=site.latitude_deg,
+                lon=site.longitude_deg,
+                height_km=site.height_km,
+                start=start,
+                end=end,
+                step_minutes=step_minutes,
+                rows=rows,
+            )
+        return rows

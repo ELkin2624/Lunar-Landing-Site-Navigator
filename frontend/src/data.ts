@@ -1,6 +1,6 @@
 export type Site = { id: string; name: string; region: string; lat: number; lon: number; x: number; y: number; note: string }
 export type Sample = { hour: number; sunElevation: number; earthElevation: number; horizonSun: number; horizonEarth: number; sunVisible: boolean; earthVisible: boolean }
-export type Scenario = { site: Site; start: string; hours: number; samples: Sample[]; source: 'demo' | 'api' }
+export type Scenario = { site: Site; start: string; hours: number; samples: Sample[]; source: 'demo' | 'api'; apiMetrics?: Metrics }
 export type Metrics = { sunPercent: number; earthPercent: number; concurrentPercent: number; longestDark: number; longestBlackout: number }
 
 // Estos puntos son muestras de interfaz, no ubicaciones de aterrizaje validadas.
@@ -39,6 +39,7 @@ function longestRun(samples: Sample[], key: 'sunVisible' | 'earthVisible') {
 }
 
 export function metrics(scenario: Scenario): Metrics {
+  if (scenario.apiMetrics) return scenario.apiMetrics
   const samples = scenario.samples.slice(0, -1)
   const count = samples.length || 1
   return {

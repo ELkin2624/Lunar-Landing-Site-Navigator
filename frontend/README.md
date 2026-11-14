@@ -14,9 +14,9 @@ Abre la URL local que muestra Vite. Para compilar: `npm run build`.
 
 ## Datos y API
 
-El repositorio aún no contiene un backend. La interfaz usa **datos de demostración ilustrativos** y los identifica de forma visible. Las coordenadas de los puntos, el mapa, el relieve y los resultados de esta demo no están validados para planificación de misiones.
+El repositorio incluye un backend FastAPI en `../backend`. El mapa y el relieve dibujado en la vista de horizonte siguen siendo **ilustraciones**; las métricas pueden venir de Horizons y LOLA cuando la API está activa. Las coordenadas de los puntos son muestras de interfaz, no ubicaciones de aterrizaje aprobadas.
 
-Por defecto se utiliza la demo. Para activar el backend, configura `VITE_USE_API=true` según `.env.example`. Entonces el cliente intenta `POST /api/scenarios/analyze`; si no hay servicio o la respuesta es inválida, usa la demo. En desarrollo, Vite redirige `/api` a `http://localhost:8000`. Para otro destino, configura `VITE_API_BASE_URL`.
+Por defecto se utiliza la demo. Para activar el backend, copia `.env.example` a `.env` y ejecuta el backend. El cliente consulta `POST /api/scenarios/analyze` para los dos sitios de la comparación, usa las métricas devueltas por FastAPI y pide horizonte LOLA. Si falla una consulta, muestra un aviso explícito y datos de demostración identificados como ilustrativos. En desarrollo, Vite redirige `/api` a `http://localhost:8000`. Para otro destino, configura `VITE_API_BASE_URL`.
 
 Solicitud esperada:
 
@@ -26,7 +26,8 @@ Solicitud esperada:
   "longitude": -29.2,
   "start_time": "2026-11-15T00:00:00Z",
   "hours": 168,
-  "step_minutes": 60
+  "step_minutes": 60,
+  "use_dem_horizon": true
 }
 ```
 
@@ -48,7 +49,7 @@ Respuesta esperada:
 }
 ```
 
-Se esperan al menos dos muestras horarias. La API debe proporcionar sus propios cálculos de efemérides y horizonte topográfico; el frontend no los calcula. La vista de horizonte sigue siendo una ilustración visual, incluso cuando las métricas provienen de la API.
+Se esperan al menos dos muestras horarias y métricas del backend. La API proporciona efemérides y horizonte topográfico; el frontend no los calcula. La vista de horizonte sigue siendo una ilustración visual, incluso cuando las métricas provienen de la API.
 
 ## Alcance actual
 

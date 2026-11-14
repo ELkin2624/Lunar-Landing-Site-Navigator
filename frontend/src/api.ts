@@ -7,14 +7,14 @@ const useApi = import.meta.env.VITE_USE_API === 'true'
  * Contrato esperado: POST /api/scenarios/analyze con {latitude, longitude,
  * start_time, hours, step_minutes}. Respuesta: {samples:[{hour,
  * sun_elevation, earth_elevation, horizon_sun, horizon_earth,
- * sun_visible, earth_visible}]}. Sin backend se usa una demo explícita.
+ * sun_visible, earth_visible}]}. La demo solo se usa cuando VITE_USE_API no está activo.
  */
 export async function analyze(site: Site, date: string, signal?: AbortSignal): Promise<Scenario> {
   if (!useApi) return makeDemoScenario(site, date)
-  try {
+  {
     const response = await fetch(`${base}/api/scenarios/analyze`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
-      body: JSON.stringify({ latitude: site.lat, longitude: site.lon, start_time: `${date}T00:00:00Z`, hours: 168, step_minutes: 60 }),
+      body: JSON.stringify({ latitude: site.lat, longitude: site.lon, start_time: `${date}T00:00:00Z`, hours: 168, step_minutes: 60, use_dem_horizon: true }),
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data: unknown = await response.json()
@@ -26,9 +26,15 @@ export async function analyze(site: Site, date: string, signal?: AbortSignal): P
       sunVisible: Boolean(item.sun_visible), earthVisible: Boolean(item.earth_visible),
     }))
     if (samples.some(s => !Number.isFinite(s.sunElevation) || !Number.isFinite(s.earthElevation))) throw new Error('Datos incompletos')
-    return { site, start: date, hours: samples.length - 1, samples, source: 'api' }
-  } catch (error) {
-    if (signal?.aborted) throw error
-    return makeDemoScenario(site, date)
+    const raw = data as { metrics?: Record<string, unknown> }
+    const supplied = raw.metrics
+    if (!supplied) throw new Error('Faltan métricas del backend')
+    const apiMetrics = {
+      sunPercent: Number(supplied.sunPercent), earthPercent: Number(supplied.earthPercent),
+      concurrentPercent: Number(supplied.concurrentPercent), longestDark: Number(supplied.longestDark),
+      longestBlackout: Number(supplied.longestBlackout),
+    }
+    if (Object.values(apiMetrics).some(value => !Number.isFinite(value))) throw new Error('Métricas inválidas del backend')
+    return { site, start: date, hours: 168, samples, source: 'api', apiMetrics }
   }
 }
