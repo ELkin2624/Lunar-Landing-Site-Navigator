@@ -66,7 +66,7 @@ Ejemplo:
   "step_minutes": 60,
   "use_dem_horizon": true,
   "observer_height_m": 2,
-  "max_horizon_distance_km": 50,
+  "max_horizon_distance_km": 250,
   "constraints": {
     "min_sunlit_fraction": 0.5,
     "min_earth_visible_fraction": 0.5,
@@ -81,7 +81,7 @@ Si `use_dem_horizon` es verdadero, la altura del observador enviada a Horizons s
 
 El campo opcional `horizon_profile` recibe puntos ordenados por azimut, por ejemplo `[{"azimuth_deg":0,"elevation_deg":2},{"azimuth_deg":180,"elevation_deg":4}]`. No puede combinarse con `use_dem_horizon`. La visibilidad se evalúa con `elevation > horizonte` y para la Tierra se suma el ángulo mínimo de antena. Los cuerpos se modelan como puntos; no se considera visibilidad parcial del disco, inclinación de paneles, potencia eléctrica ni enlace de radio.
 
-El DEM incluido cubre el polo sur hasta 75° S, con 240 m por píxel. El cálculo sigue rayos en 360 azimuts, muestrea el terreno cada 120 m y considera la curvatura de una esfera lunar de 1 737,4 km. Requiere cobertura completa hasta `max_horizon_distance_km` o devuelve 422. Es una aproximación dependiente de la resolución y distancia elegidas, no una certificación de aterrizaje. Fuente: [PDS LOLA LDEM_75S_240M](https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/) y [proyección DSMAP_POLAR](https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/catalog/dsmap_polar.cat).
+El DEM incluido cubre el polo sur hasta 75° S, con 240 m por píxel. El cálculo sigue rayos en 360 azimuts, muestrea el terreno cada 120 m y considera la curvatura de una esfera lunar de 1 737,4 km. Requiere cobertura completa hasta `max_horizon_distance_km` o devuelve 422. El alcance por defecto es 250 km (máximo 300): cerca del polo, macizos a 100–200 km pueden elevar el horizonte varios grados por encima de la trayectoria solar de 1–2°, y con 250 km todos los sitios del catálogo siguen dentro de la cobertura. Cuesta del orden de 1 s por cada 100 km y sitio. Es una aproximación dependiente de la resolución y distancia elegidas, no una certificación de aterrizaje. Fuente: [PDS LOLA LDEM_75S_240M](https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/) y [proyección DSMAP_POLAR](https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/catalog/dsmap_polar.cat).
 
 Sin refinamiento, el intervalo de incertidumbre temporal de un cambio puede alcanzar `step_minutes`. Con exploración densa, se reduce a `refinement_step_minutes` para los cambios detectados; las métricas usan el punto medio de cada intervalo. El intervalo máximo es 14 días y 500 pasos en modo normal, o 5000 en modo denso. Los tiempos de entrada deben incluir zona horaria y se normalizan a UTC. Una caída o respuesta inesperada de Horizons devuelve HTTP 502.
 

@@ -142,7 +142,7 @@ def get_site_horizon(
     site_id: str,
     request: Request,
     observer_height_m: float = Query(default=2.0, ge=0.0, le=100.0),
-    max_distance_km: float = Query(default=50.0, ge=1.0, le=100.0),
+    max_distance_km: float = Query(default=250.0, ge=1.0, le=300.0),
     azimuth_step_deg: int = Query(default=1),
 ) -> TerrainResult:
     site = find_site(site_id)

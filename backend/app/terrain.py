@@ -84,10 +84,11 @@ def _destination(latitude_deg: float, longitude_deg: float, azimuth_deg: float, 
 
 
 def horizon_profile(dem: LolaDem, site: Site, *, observer_height_m: float = 2.0,
-                    max_distance_km: float = 50, azimuth_step_deg: int = 1) -> tuple[list[HorizonPoint], float]:
+                    max_distance_km: float = 250, azimuth_step_deg: int = 1) -> tuple[list[HorizonPoint], float]:
     if not 0 <= observer_height_m <= 100:
         raise ValueError("observer_height_m must be between 0 and 100")
-    if not 1 <= max_distance_km <= 100 or azimuth_step_deg not in (1, 2, 5, 10):
+    # Massifs 100-200 km away still rise above the 1-2° polar solar path.
+    if not 1 <= max_distance_km <= 300 or azimuth_step_deg not in (1, 2, 5, 10):
         raise ValueError("Unsupported ray distance or azimuth step")
     site_height = dem.height_m(site.latitude_deg, site.longitude_deg)
     origin_radius = dem.radius_m + site_height + observer_height_m
