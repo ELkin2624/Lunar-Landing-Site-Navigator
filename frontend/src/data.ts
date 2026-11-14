@@ -6,7 +6,6 @@ export type Metrics = { sunPercent: number; earthPercent: number; concurrentPerc
 
 // Mouton, Malapert y Haworth usan el centro oficial del IAU Gazetteer; de Gerlache Rim 2 es aproximado.
 // No son ubicaciones de aterrizaje validadas.
-export const SITES: Site[] = [
 // Mouton, Malapert y Haworth usan el centro oficial del IAU Gazetteer; de Gerlache Rim 2 es aproximado.
 // No son ubicaciones de aterrizaje validadas.
 export const SITES: Site[] = [
@@ -14,7 +13,6 @@ export const SITES: Site[] = [
   { id: 'malapert', name: 'Mons Malapert', region: 'Región Artemis III', lat: -85.98, lon: -1.67, note: 'Relieve alto y horizonte complejo' },
   { id: 'haworth', name: 'Haworth (fondo)', region: 'Región Polar Sur', lat: -87.45, lon: -5.17, note: 'Fondo de cráter en sombra permanente' },
   { id: 'gerlache', name: 'de Gerlache Rim 2', region: 'Región Artemis III', lat: -88.3, lon: -59.5, note: 'Borde de cráter próximo al polo' },
-]
 ]
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
