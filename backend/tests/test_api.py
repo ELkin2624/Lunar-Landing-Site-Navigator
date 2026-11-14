@@ -103,6 +103,16 @@ def test_evaluate_with_dem(monkeypatch, tmp_path):
         data = response.json()
         assert data["horizon_source"] == "LOLA_LDEM_75S_240M_PDS"
         assert data["site_height_km_used"] == 0.002
+        assert len(data["horizon_profile"]) == 360
+        legacy = client.post("/api/scenarios/analyze", json={
+            "latitude": -89.5, "longitude": 0,
+            "start_time": "2026-11-15T00:00:00Z", "hours": 3,
+            "use_dem_horizon": True, "max_horizon_distance_km": 1,
+        })
+        assert legacy.status_code == 200, legacy.text
+        assert len(legacy.json()["horizon_profile"]) == 360
+        assert legacy.json()["samples"][0]["sun_azimuth"] == 90
+        assert legacy.json()["samples"][0]["earth_azimuth"] == 90
         horizon = client.post("/api/v1/terrain/horizon", json={"site": payload["site"], "max_distance_km": 1})
         assert horizon.status_code == 200, horizon.text
         assert len(horizon.json()["profile"]) == 360

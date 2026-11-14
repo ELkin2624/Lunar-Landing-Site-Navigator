@@ -135,6 +135,7 @@ class Metrics(BaseModel):
 class ScenarioResult(BaseModel):
     scenario: Scenario
     samples: list[Sample]
+    horizon_profile: list[HorizonPoint] | None = None
     metrics: Metrics
     timeline: Timeline
     ephemeris_source: str = "JPL Horizons"
@@ -189,6 +190,8 @@ class LegacyAnalyzeRequest(BaseModel):
 
 class LegacySample(BaseModel):
     hour: int
+    sun_azimuth: float | None = None
+    earth_azimuth: float | None = None
     sun_elevation: float
     earth_elevation: float
     horizon_sun: float
@@ -204,6 +207,7 @@ class LegacyAnalyzeResponse(BaseModel):
     start: str
     hours: int
     samples: list[LegacySample]
+    horizon_profile: list[HorizonPoint] | None = None
     source: str = "api"
     metrics: dict
 

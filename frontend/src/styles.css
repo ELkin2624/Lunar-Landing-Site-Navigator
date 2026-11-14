@@ -2,3 +2,28 @@
 @media(max-width:1250px){.sidebar{width:220px}.workspace-grid{grid-template-columns:1fr 1.25fr}.controls-panel{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:5px 0}.controls-panel .panel-heading{grid-column:1/-1}.controls-panel .control-divider{display:none}.controls-panel>.field-label{margin-top:7px}.controls-panel>.field-label:nth-of-type(2){grid-column:2;grid-row:2}.controls-panel>.field-label:nth-of-type(3){grid-column:3;grid-row:2}.controls-panel>.date-input{grid-column:1;grid-row:3}.controls-panel>.mode-toggle{grid-column:2;grid-row:3}.controls-panel>.select-like{grid-column:3;grid-row:3}.controls-panel>.field-hint{grid-column:3;grid-row:4}.analyst-fields{grid-column:1/-1;grid-template-columns:repeat(3,1fr)}}
 @media(max-width:900px){.sidebar{position:fixed;z-index:20;left:-250px;top:0;bottom:0;transition:left .2s;box-shadow:14px 0 40px #0008}.sidebar.open{left:0}.mobile-close{display:block;margin-left:auto;background:none;border:0;color:#aab9c5}.mobile-menu{display:grid;place-items:center;border:0;background:none;color:#cbd6de;margin-right:12px}.topbar{justify-content:flex-start}.top-actions{margin-left:auto}.content{padding:25px 22px}.metric-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.topbar{padding:0 17px;height:58px}.breadcrumbs{font-size:8px;gap:5px}.breadcrumbs strong{font-size:9px}.top-actions{gap:7px}.top-divider,.avatar{display:none}.source-pill{font-size:8px;padding:6px}.content{padding:22px 14px}.page-heading{display:block}.page-heading h1{font-size:27px}.page-heading p{line-height:1.5}.heading-actions{margin-top:16px}.heading-actions button{flex:1;padding:0 8px;font-size:10px}.workspace-grid,.lower-grid,.compare-layout{display:block}.workspace-grid>.panel,.lower-grid>.panel,.compare-layout>.panel{margin-bottom:13px}.horizon-svg{height:220px}.controls-panel{display:block}.controls-panel .control-divider{display:block}.controls-panel>.field-label:nth-of-type(2),.controls-panel>.field-label:nth-of-type(3){grid-column:auto;grid-row:auto}.metric-grid{gap:8px}.metric-card{padding:11px}.metric-value{font-size:23px}.metrics-heading{align-items:center}.period-label{font-size:8px}.timeline-help{display:none}.horizon-note{display:none}.comparison-selectors{gap:7px;margin:8px 12px 15px}.comparison-table{margin:0 12px}.table-head,.table-row{padding:11px 8px;gap:5px;font-size:9px}.table-head strong{font-size:8px}.table-row strong{font-size:10px}footer{line-height:1.5;font-size:7px}}
+
+/* The square preview is georeferenced to the LOLA south polar DEM. */
+.moon-map{background:#0b141e}
+.polar-map{position:absolute;top:0;left:50%;width:260px;height:260px;transform:translateX(-50%);background:#45505a url('/lola_south_pole.png') center/100% 100% no-repeat;box-shadow:0 0 35px #0008}
+.polar-map:after{content:'';position:absolute;inset:0;background:radial-gradient(circle,transparent 48%,#07111b55 100%);pointer-events:none}
+.map-rings{width:206px;height:206px;box-shadow:none}
+.map-cross{z-index:1}
+.pole-label{left:53%;top:52%}
+.map-coordinate,.map-compass{z-index:3;text-shadow:0 1px 5px #000}
+.map-pick-layer{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;z-index:2;cursor:crosshair}
+.map-rings,.map-cross,.pole-label,.map-overlay{pointer-events:none}
+.map-custom-point{position:absolute;z-index:4;width:15px;height:15px;border:2px solid #fff;border-radius:50%;background:#f0bb70;box-shadow:0 0 0 5px #f0bb7060,0 0 16px #f0bb70;transform:translate(-50%,-50%);pointer-events:none}
+.coordinate-form{display:grid;grid-template-columns:1fr 1fr auto;gap:7px;padding:0 15px 15px;align-items:end}
+.coordinate-title{grid-column:1/-1;color:#8496a5;font-size:8px;letter-spacing:.14em;font-weight:700}
+.coordinate-form label{display:grid;gap:4px;color:#a9b8c2;font-size:9px}
+.coordinate-form input{width:100%;min-width:0;height:31px;padding:0 6px;color:#e7eff4;background:#172536;border:1px solid #33485a;border-radius:5px;font-size:11px}
+.coordinate-form button{height:31px;padding:0 9px;background:#e2b77a;border:1px solid #e2b77a;border-radius:5px;color:#17212e;font-size:10px;font-weight:700}
+.coordinate-error{grid-column:1/-1;color:#e9a7a7;font-size:10px;line-height:1.4}
+.polar-map.lroc-layer{background-image:url('/lroc_wac_south_pole.png')}
+.polar-map.lola-layer{background-image:url('/lola_south_pole.png')}
+.map-layer-toggle{position:absolute;left:11px;top:30px;z-index:5;display:flex;gap:3px;padding:3px;background:#0c1722d9;border:1px solid #61728688;border-radius:6px}
+.map-layer-toggle button{border:0;border-radius:4px;background:transparent;color:#cbd5dc;font-size:9px;font-weight:700;padding:5px 6px}
+.map-layer-toggle button.active{background:#dcb578;color:#17212e}
+.trek-link{color:#e5bb80;font-size:10px;text-decoration:none;margin-top:4px}
+.trek-link:hover{text-decoration:underline}

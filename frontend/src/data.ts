@@ -1,14 +1,15 @@
-export type Site = { id: string; name: string; region: string; lat: number; lon: number; x: number; y: number; note: string }
-export type Sample = { hour: number; sunElevation: number; earthElevation: number; horizonSun: number; horizonEarth: number; sunVisible: boolean; earthVisible: boolean }
-export type Scenario = { site: Site; start: string; hours: number; samples: Sample[]; source: 'demo' | 'api'; apiMetrics?: Metrics }
+export type Site = { id: string; name: string; region: string; lat: number; lon: number; note: string }
+export type Sample = { hour: number; sunElevation: number; earthElevation: number; sunAzimuth?: number; earthAzimuth?: number; horizonSun: number; horizonEarth: number; sunVisible: boolean; earthVisible: boolean }
+export type HorizonPoint = { azimuth: number; elevation: number }
+export type Scenario = { site: Site; start: string; hours: number; samples: Sample[]; source: 'demo' | 'api'; apiMetrics?: Metrics; horizonProfile?: HorizonPoint[] }
 export type Metrics = { sunPercent: number; earthPercent: number; concurrentPercent: number; longestDark: number; longestBlackout: number }
 
 // Estos puntos son muestras de interfaz, no ubicaciones de aterrizaje validadas.
 export const SITES: Site[] = [
-  { id: 'mouton', name: 'Mons Mouton', region: 'Región Artemis III', lat: -85.4, lon: -29.2, x: 40, y: 29, note: 'Meseta elevada, próxima al polo sur' },
-  { id: 'malapert', name: 'Malapert Massif', region: 'Región Artemis III', lat: -86.0, lon: 3.8, x: 66, y: 42, note: 'Relieve alto y horizonte complejo' },
-  { id: 'haworth', name: 'Haworth', region: 'Región Artemis III', lat: -87.6, lon: -4.1, x: 50, y: 64, note: 'Entorno de cráter de sombra persistente' },
-  { id: 'gerlache', name: 'de Gerlache Rim 2', region: 'Región Artemis III', lat: -88.3, lon: -59.5, x: 28, y: 66, note: 'Borde de cráter próximo al polo' },
+  { id: 'mouton', name: 'Mons Mouton', region: 'Región Artemis III', lat: -85.4, lon: -29.2, note: 'Meseta elevada, próxima al polo sur' },
+  { id: 'malapert', name: 'Malapert Massif', region: 'Región Artemis III', lat: -86.0, lon: 3.8, note: 'Relieve alto y horizonte complejo' },
+  { id: 'haworth', name: 'Haworth', region: 'Región Artemis III', lat: -87.6, lon: -4.1, note: 'Entorno de cráter de sombra persistente' },
+  { id: 'gerlache', name: 'de Gerlache Rim 2', region: 'Región Artemis III', lat: -88.3, lon: -59.5, note: 'Borde de cráter próximo al polo' },
 ]
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))

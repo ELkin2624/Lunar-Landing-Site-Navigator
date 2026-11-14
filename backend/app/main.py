@@ -258,6 +258,7 @@ async def evaluate(scenario: Scenario, horizons: HorizonsClient, dem: LolaDem | 
     return ScenarioResult(
         scenario=scenario,
         samples=samples,
+        horizon_profile=profile,
         metrics=analyze(scenario, timeline),
         timeline=timeline,
         horizon_source=source,
@@ -443,6 +444,8 @@ async def analyze_legacy(payload: LegacyAnalyzeRequest, request: Request) -> Leg
     legacy_samples = [
         LegacySample(
             hour=int(round((s.time_utc - payload.start_time).total_seconds() / 3600.0)),
+            sun_azimuth=s.sun.azimuth_deg,
+            earth_azimuth=s.earth.azimuth_deg,
             sun_elevation=s.sun.elevation_deg,
             earth_elevation=s.earth.elevation_deg,
             horizon_sun=s.sun.horizon_deg,
@@ -463,6 +466,7 @@ async def analyze_legacy(payload: LegacyAnalyzeRequest, request: Request) -> Leg
         start=payload.start_time.strftime("%Y-%m-%d"),
         hours=payload.hours,
         samples=legacy_samples,
+        horizon_profile=result.horizon_profile,
         source=result.horizon_source,
         metrics={
             "sunPercent": round(result.metrics.sunlit_fraction * 100),

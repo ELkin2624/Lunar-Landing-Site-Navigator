@@ -2,28 +2,56 @@ import { useEffect, useMemo, useState } from 'react'
 import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, Download, Earth, Gauge, Layers3, MapPin, Menu, Moon, Plus, Radio, Search, Settings2, ShieldCheck, Sun, X } from 'lucide-react'
 import { analyze } from './api'
 import { SITES, chartPath, formatHour, makeDemoScenario, metrics, verdict, type Scenario, type Site } from './data'
+import { isWithinPolarMap, polarMapCoordinates, polarMapPosition } from './polar'
 
 const initialDate = '2026-11-15'
-const craters = [
-  [11, 13, 16], [46, 9, 11], [74, 14, 18], [94, 7, 12], [24, 40, 20], [80, 42, 16],
-  [52, 52, 27], [9, 75, 14], [29, 84, 20], [73, 79, 21], [95, 81, 19], [5, 33, 8],
-  [38, 19, 8], [90, 60, 9], [63, 28, 13], [56, 94, 16], [18, 60, 7], [83, 97, 9],
-]
-
-function LunarMap({ selected, onSelect }: { selected: string; onSelect: (site: Site) => void }) {
-  return <div className="moon-map" aria-label="Mapa esquemático del polo sur lunar">
-    <div className="moon-texture">
-      {craters.map(([x, y, size], i) => <i key={i} className="crater" style={{ left: `${x}%`, top: `${y}%`, width: `${size}%`, aspectRatio: '1' }} />)}
+function LunarMap({ site, onSelect, onPick }: { site: Site; onSelect: (site: Site) => void; onPick: (latitude: number, longitude: number) => void }) {
+  const [layer, setLayer] = useState<'lroc' | 'lola'>('lroc')
+  const pick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const horizontal = event.detail === 0 ? 0.5 : (event.clientX - bounds.left) / bounds.width
+    const vertical = event.detail === 0 ? 0.5 : (event.clientY - bounds.top) / bounds.height
+    const coordinates = polarMapCoordinates(horizontal, vertical)
+    onPick(Number(coordinates.latitude.toFixed(3)), Number(coordinates.longitude.toFixed(3)))
+  }
+  return <div className="moon-map" aria-label="Mapa de relieve LOLA del polo sur lunar; pulse un lugar para analizarlo">
+    <div className={`polar-map ${layer}-layer`}>
+      <button className="map-pick-layer" type="button" onClick={pick} aria-label="Elegir un punto del mapa para analizar; con teclado elige el polo sur" title="Elegir coordenadas en el mapa"/>
       <div className="map-rings" /><div className="map-cross map-cross-x" /><div className="map-cross map-cross-y" />
-      <span className="pole-label">90° S</span><span className="map-coordinate">LUNAR SOUTH POLE • POLAR VIEW</span>
-      {SITES.map((site, i) => <button key={site.id} className={`map-point ${selected === site.id ? 'active' : ''}`} style={{ left: `${site.x}%`, top: `${site.y}%` }} onClick={() => onSelect(site)} aria-label={`Seleccionar ${site.name}`} title={site.name}><span className="point-dot"/><span className="point-index">0{i + 1}</span></button>)}
-      <span className="map-compass">N <span>↑</span></span>
+      <span className="pole-label">90° S</span>
+      {SITES.map((candidate, i) => <button key={candidate.id} className={`map-point ${site.id === candidate.id ? 'active' : ''}`} style={polarMapPosition(candidate.lat, candidate.lon)} onClick={() => onSelect(candidate)} aria-label={`Seleccionar ${candidate.name}`} title={`${candidate.name} · ${Math.abs(candidate.lat)}° S, ${candidate.lon}° E`}><span className="point-dot"/><span className="point-index">0{i + 1}</span></button>)}
+      {site.id === 'custom' && isWithinPolarMap(site.lat, site.lon) && <span className="map-custom-point" style={polarMapPosition(site.lat, site.lon)} aria-label="Punto personalizado seleccionado"/>}
     </div>
-    <div className="map-overlay"><span className="live-dot"/> MAPA ESQUEMÁTICO <span className="map-scale">SIN ESCALA</span></div>
+    <span className="map-coordinate">LOLA · POLO SUR</span>
+    <span className="map-compass">0° E <span>↑</span></span>
+    <div className="map-layer-toggle" role="group" aria-label="Capa cartográfica"><button type="button" aria-pressed={layer === 'lroc'} className={layer === 'lroc' ? 'active' : ''} onClick={() => setLayer('lroc')}>LROC foto</button><button type="button" aria-pressed={layer === 'lola'} className={layer === 'lola' ? 'active' : ''} onClick={() => setLayer('lola')}>LOLA relieve</button></div>
+    <div className="map-overlay"><span className="live-dot"/> PULSA PARA ANALIZAR <span className="map-scale">{layer === 'lroc' ? 'LROC WAC · MOON TREK' : 'LOLA · 240 M/PX'}</span></div>
   </div>
 }
 
+function CoordinateForm({ site, onPick }: { site: Site; onPick: (latitude: number, longitude: number) => void }) {
+  const [latitude, setLatitude] = useState(String(site.lat))
+  const [longitude, setLongitude] = useState(String(site.lon))
+  const [error, setError] = useState('')
+  useEffect(() => { setLatitude(String(site.lat)); setLongitude(String(site.lon)); setError('') }, [site])
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const lat = Number(latitude)
+    const lon = Number(longitude)
+    if (!isWithinPolarMap(lat, lon)) { setError('Elige un punto dentro del mapa visible (polo sur, ±192 km).'); return }
+    onPick(Number(lat.toFixed(3)), Number(lon.toFixed(3)))
+  }
+  return <form className="coordinate-form" onSubmit={submit}>
+    <span className="coordinate-title">COORDENADAS DEL PUNTO</span>
+    <label>Latitud <input type="number" min="-90" max="-75" step="0.001" value={latitude} onChange={event => setLatitude(event.target.value)} required aria-label="Latitud en grados, sur negativo"/></label>
+    <label>Longitud <input type="number" min="-180" max="180" step="0.001" value={longitude} onChange={event => setLongitude(event.target.value)} required aria-label="Longitud en grados, este positivo"/></label>
+    <button type="submit">Analizar</button>
+    {error && <span className="coordinate-error" role="alert">{error}</span>}
+  </form>
+}
+
 function Horizon({ scenario, hour }: { scenario: Scenario; hour: number }) {
+  if (scenario.source === 'api' && scenario.horizonProfile) return <MeasuredHorizon scenario={scenario} hour={hour}/>
   const sample = scenario.samples[Math.min(hour, scenario.samples.length - 1)]
   const sunY = 110 - sample.sunElevation * 6
   const earthY = 110 - sample.earthElevation * 6
@@ -41,6 +69,40 @@ function Horizon({ scenario, hour }: { scenario: Scenario; hour: number }) {
       <text x="20" y="192" fill="#e5edf1" fontSize="10">O</text><text x="344" y="192" fill="#e5edf1" fontSize="10">N</text><text x="669" y="192" fill="#e5edf1" fontSize="10">E</text>
     </svg>
     <div className="horizon-legend"><span><i className="dot amber"/> Sol {sample.sunElevation.toFixed(1)}°</span><span><i className="dot blue"/> Tierra {sample.earthElevation.toFixed(1)}°</span><span><i className="dot grey"/> Relieve ilustrativo</span></div>
+  </div>
+}
+
+function MeasuredHorizon({ scenario, hour }: { scenario: Scenario; hour: number }) {
+  const sample = scenario.samples[Math.min(hour, scenario.samples.length - 1)]
+  const profile = scenario.horizonProfile!
+  const elevations = profile.map(point => point.elevation)
+  const minElevation = Math.floor(Math.min(-5, sample.sunElevation, sample.earthElevation, ...elevations) - 1)
+  const maxElevation = Math.ceil(Math.max(8, sample.sunElevation, sample.earthElevation, ...elevations) + 1)
+  const x = (azimuth: number) => azimuth / 360 * 700
+  const y = (elevation: number) => 170 - (elevation - minElevation) / (maxElevation - minElevation) * 145
+  const skyline = [...profile, { azimuth: 360, elevation: profile[0].elevation }]
+  const line = skyline.map((point, index) => `${index ? 'L' : 'M'}${x(point.azimuth).toFixed(1)} ${y(point.elevation).toFixed(1)}`).join(' ')
+  const terrain = `${line} L700 210 L0 210 Z`
+  const sunX = x(sample.sunAzimuth ?? 0)
+  const earthX = x(sample.earthAzimuth ?? 0)
+  const sunY = y(sample.sunElevation)
+  const earthY = y(sample.earthElevation)
+  return <div className="horizon-wrap">
+    <svg className="horizon-svg" viewBox="0 0 700 210" role="img" aria-label="Perfil del horizonte LOLA en 360 grados con posiciones del Sol y la Tierra calculadas por JPL Horizons">
+      <defs><linearGradient id="measuredSky" x2="0" y2="1"><stop stopColor="#112741"/><stop offset="1" stopColor="#19212b"/></linearGradient><linearGradient id="measuredTerrain" x2="0" y2="1"><stop stopColor="#8a9196"/><stop offset="1" stopColor="#26333e"/></linearGradient></defs>
+      <rect width="700" height="210" fill="url(#measuredSky)"/>
+      <line x1="0" x2="700" y1={y(0)} y2={y(0)} stroke="#e8f0f5" strokeOpacity=".55" strokeDasharray="5 6"/>
+      <text x="8" y={Math.max(12, y(0) - 5)} fill="#c2cbd2" fontSize="10">0°</text>
+      <path d={terrain} fill="url(#measuredTerrain)"/><path d={line} fill="none" stroke="#d1d9db" strokeWidth="1.5"/>
+      <circle cx={sunX} cy={sunY} r="13" fill="#f7cc79" opacity={sample.sunVisible ? 1 : .4}/>
+      <circle cx={sunX} cy={sunY} r="20" fill="none" stroke="#f7cc79" opacity={sample.sunVisible ? .6 : .3}/>
+      <circle cx={earthX} cy={earthY} r="9" fill="#75bbd3" opacity={sample.earthVisible ? 1 : .4}/>
+      <circle cx={earthX} cy={earthY} r="15" fill="none" stroke="#75bbd3" opacity={sample.earthVisible ? .7 : .3}/>
+      <text x={Math.min(630, sunX + 12)} y={Math.max(14, sunY - 12)} fill="#ffe0a5" fontSize="11">SOL</text>
+      <text x={Math.min(625, earthX + 12)} y={Math.max(14, earthY - 12)} fill="#acd8e7" fontSize="11">TIERRA</text>
+      {['N', 'E', 'S', 'O', 'N'].map((direction, index) => <text key={index} x={Math.max(5, Math.min(685, index * 175))} y="199" fill="#e5edf1" fontSize="10">{direction}</text>)}
+    </svg>
+    <div className="horizon-legend"><span><i className="dot amber"/> Sol {sample.sunElevation.toFixed(1)}° · {sample.sunAzimuth?.toFixed(0)}° az</span><span><i className="dot blue"/> Tierra {sample.earthElevation.toFixed(1)}° · {sample.earthAzimuth?.toFixed(0)}° az</span><span><i className="dot grey"/> Horizonte LOLA</span></div>
   </div>
 }
 
@@ -70,6 +132,7 @@ function downloadCsv(scenario: Scenario) {
 
 export default function App() {
   const [site, setSite] = useState(SITES[0])
+  const [customSite, setCustomSite] = useState<Site | null>(null)
   const [date, setDate] = useState(initialDate)
   const [scenario, setScenario] = useState<Scenario>(() => makeDemoScenario(SITES[0], initialDate))
   const [hour, setHour] = useState(48)
@@ -83,13 +146,40 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
+  const [compareError, setCompareError] = useState<string | null>(null)
+  const selectSite = (candidate: Site) => {
+    if (candidate.lat !== site.lat || candidate.lon !== site.lon) {
+      setScenario(makeDemoScenario(candidate, date))
+      setLoading(true)
+      setApiError(null)
+      setSite(candidate)
+    }
+    setTab('overview')
+    setSidebarOpen(false)
+  }
+  const selectDate = (nextDate: string) => {
+    setScenario(makeDemoScenario(site, nextDate))
+    setCompared(makeDemoScenario(SITES.find(candidate => candidate.id === compareId) || SITES[1], nextDate))
+    setLoading(true)
+    setApiError(null)
+    setDate(nextDate)
+  }
+  const pickCoordinate = (latitude: number, longitude: number) => {
+    const candidate: Site = { id: 'custom', name: 'Punto personalizado', region: 'Coordenada seleccionada', lat: latitude, lon: longitude, note: 'Coordenada exploratoria sobre relieve LOLA; no es un sitio aprobado' }
+    setCustomSite(candidate)
+    selectSite(candidate)
+  }
   useEffect(() => { const controller = new AbortController(); setLoading(true); setApiError(null); analyze(site, date, controller.signal).then(result => { setScenario(result); setHour(Math.min(48, result.hours)); setLoading(false) }).catch(error => { if (controller.signal.aborted) return; setScenario(makeDemoScenario(site, date)); setApiError(`No se pudo consultar el backend: ${String(error)}. Se muestran datos ilustrativos.`); setLoading(false) }); return () => controller.abort() }, [site, date])
   useEffect(() => { if (compareId === site.id) setCompareId(SITES.find(s => s.id !== site.id)!.id) }, [compareId, site.id])
   const m = useMemo(() => metrics(scenario), [scenario])
   const status = verdict(m, minSun, minEarth, maxBlackout)
-  const [compared, setCompared] = useState<Scenario>(() => makeDemoScenario(SITES[1], initialDate))
-  useEffect(() => { const controller = new AbortController(); const comparisonSite = SITES.find(s => s.id === compareId) || SITES[1]; analyze(comparisonSite, date, controller.signal).then(setCompared).catch(error => { if (controller.signal.aborted) return; setCompared(makeDemoScenario(comparisonSite, date)); setApiError(`No se pudo comparar con datos del backend: ${String(error)}. Se muestran datos ilustrativos.`) }); return () => controller.abort() }, [compareId, date])
+  const [comparedState, setCompared] = useState<Scenario>(() => makeDemoScenario(SITES[1], initialDate))
+  useEffect(() => { const controller = new AbortController(); const comparisonSite = SITES.find(s => s.id === compareId) || SITES[1]; setCompared(makeDemoScenario(comparisonSite, date)); setCompareError(null); analyze(comparisonSite, date, controller.signal).then(setCompared).catch(error => { if (controller.signal.aborted) return; setCompareError(`No se pudo analizar ${comparisonSite.name}: ${String(error)}. Su columna muestra datos ilustrativos.`) }); return () => controller.abort() }, [compareId, date])
+  const compared = comparedState.site.id === compareId && comparedState.start === date
+    ? comparedState : makeDemoScenario(SITES.find(candidate => candidate.id === compareId) || SITES[1], date)
   const compareMetrics = metrics(compared)
+  const noticeError = apiError || (tab === 'compare' ? compareError : null)
+  const allResultsFromApi = scenario.source === 'api' && (tab !== 'compare' || compared.source === 'api')
   const filteredSites = SITES.filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
   const currentSample = scenario.samples[Math.min(hour, scenario.samples.length - 1)]
   return <div className="app-shell">
@@ -100,24 +190,24 @@ export default function App() {
       <button className={`nav-item ${tab === 'compare' ? 'selected' : ''}`} onClick={() => { setTab('compare'); setSidebarOpen(false) }}><Layers3 size={18}/> Comparar sitios <ChevronRight size={15}/></button>
       <div className="sidebar-section-title sites-title">SITIOS CANDIDATOS <span>04</span></div>
       <div className="site-search"><Search size={15}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar región..." aria-label="Buscar sitios"/></div>
-      <div className="site-list">{filteredSites.map(item => <button key={item.id} className={`site-item ${item.id === site.id ? 'active' : ''}`} onClick={() => { setSite(item); setTab('overview'); setSidebarOpen(false) }}><span className="site-number">0{SITES.indexOf(item) + 1}</span><span><strong>{item.name}</strong><small>{item.region}</small></span>{item.id === site.id && <span className="active-indicator"/>}</button>)}{filteredSites.length === 0 && <p className="empty-search">Sin resultados</p>}</div>
+      <div className="site-list">{customSite && <button className={`site-item ${site.id === 'custom' ? 'active' : ''}`} onClick={() => selectSite(customSite)}><span className="site-number"><MapPin size={14}/></span><span><strong>Punto personalizado</strong><small>{Math.abs(customSite.lat).toFixed(3)}° S · {customSite.lon.toFixed(3)}° E</small></span>{site.id === 'custom' && <span className="active-indicator"/>}</button>}{filteredSites.map(item => <button key={item.id} className={`site-item ${item.id === site.id ? 'active' : ''}`} onClick={() => selectSite(item)}><span className="site-number">0{SITES.indexOf(item) + 1}</span><span><strong>{item.name}</strong><small>{item.region}</small></span>{item.id === site.id && <span className="active-indicator"/>}</button>)}{filteredSites.length === 0 && <p className="empty-search">Sin resultados</p>}</div>
       <div className="sidebar-bottom"><div className="mission-card"><span className="mini-orbit"><span/></span><small>PROYECTO</small><strong>South Pole<br/>Explorer</strong><span className="mission-card-foot">NASA SPACE APPS 2026 <ArrowUpRight size={14}/></span></div><div className="sidebar-note"><CircleHelp size={15}/> Coordenadas y datos demo ilustrativos</div></div>
     </aside>
     <div className="main-shell">
-      <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menú"><Menu size={21}/></button><div className="breadcrumbs">MISSION CONTROL <ChevronRight size={13}/> <strong>{tab === 'overview' ? 'Lunar Explorer' : 'Site Comparator'}</strong></div><div className="top-actions"><span className={`source-pill ${scenario.source === 'api' ? 'api' : ''}`}><span className="live-dot"/>{scenario.source === 'api' ? 'DATOS API' : 'MODO DEMO'}</span><span className="top-divider"/><span className="avatar">LP</span></div></header>
+      <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menú"><Menu size={21}/></button><div className="breadcrumbs">MISSION CONTROL <ChevronRight size={13}/> <strong>{tab === 'overview' ? 'Lunar Explorer' : 'Site Comparator'}</strong></div><div className="top-actions"><span className={`source-pill ${scenario.source === 'api' && !loading ? 'api' : ''}`}><span className="live-dot"/>{loading ? 'CALCULANDO' : scenario.source === 'api' ? 'DATOS API' : 'MODO DEMO'}</span><span className="top-divider"/><span className="avatar">LP</span></div></header>
       <main className="content">
         <div className="page-heading"><div><div className="eyebrow"><span/> LUNAR SOUTH POLE / MISSION ANALYSIS</div><h1>{tab === 'overview' ? 'Explorador lunar' : 'Comparar sitios'}<span className="heading-star">✦</span></h1><p>{tab === 'overview' ? 'Explora condiciones de iluminación y visibilidad terrestre para planificar una misión.' : 'Evalúa dos ubicaciones bajo las mismas condiciones y restricciones.'}</p></div><div className="heading-actions"><button className="outline-button" onClick={() => downloadCsv(scenario)}><Download size={16}/> Exportar CSV</button><button className="primary-button" onClick={() => setTab(tab === 'overview' ? 'compare' : 'overview')}>{tab === 'overview' ? <Plus size={17}/> : <Compass size={17}/>} {tab === 'overview' ? 'Comparar sitios' : 'Volver al explorador'}</button></div></div>
-        <div className="notice" role={apiError ? 'alert' : undefined}><span className="notice-icon"><Activity size={16}/></span><span><strong>{apiError || (scenario.source === 'api' ? 'Análisis del backend conectado.' : 'Datos de demostración.')}</strong> {scenario.source === 'api' && !apiError ? 'Resultados basados en efemérides y relieve; verifica su resolución antes de tomar decisiones.' : 'Los datos ilustrativos no sirven para decisiones de misión.'}</span><button aria-label="Más información" title="El backend debe proporcionar efemérides y horizonte topográfico verificados"><CircleHelp size={16}/></button></div>
+        <div className="notice" role={noticeError ? 'alert' : undefined}><span className="notice-icon"><Activity size={16}/></span><span><strong>{noticeError || (loading ? 'Calculando el sitio seleccionado.' : allResultsFromApi ? 'Análisis del backend conectado.' : 'Hay datos de demostración en pantalla.')}</strong> {allResultsFromApi && !noticeError && !loading ? 'Resultados basados en efemérides y relieve; verifica su resolución antes de tomar decisiones.' : 'Los datos ilustrativos no sirven para decisiones de misión.'}</span><button aria-label="Más información" title="El backend debe proporcionar efemérides y horizonte topográfico verificados"><CircleHelp size={16}/></button></div>
         {tab === 'overview' ? <>
           <div className="workspace-grid">
-            <section className="panel map-panel"><div className="panel-heading"><div><span className="section-kicker">01 / SELECCIÓN DE SITIO</span><h2>Explorador de superficie</h2></div><span className="icon-button" title="Vista esquemática"><Layers3 size={18}/></span></div><LunarMap selected={site.id} onSelect={setSite}/><div className="selected-site"><span className="selected-pin"><MapPin size={18}/></span><div><small>SITIO SELECCIONADO</small><strong>{site.name}</strong><span>{Math.abs(site.lat).toFixed(1)}° S · {Math.abs(site.lon).toFixed(1)}° {site.lon < 0 ? 'O' : 'E'}</span></div><ChevronRight size={18}/></div></section>
+            <section className="panel map-panel"><div className="panel-heading"><div><span className="section-kicker">01 / SELECCIÓN DE SITIO</span><h2>Explorador de superficie</h2></div><span className="icon-button" title="Fotografía LROC y relieve LOLA"><Layers3 size={18}/></span></div><LunarMap site={site} onSelect={selectSite} onPick={pickCoordinate}/><div className="selected-site"><span className="selected-pin"><MapPin size={18}/></span><div><small>SITIO SELECCIONADO</small><strong>{site.name}</strong><span>{Math.abs(site.lat).toFixed(3)}° S · {Math.abs(site.lon).toFixed(3)}° {site.lon < 0 ? 'O' : 'E'}</span><a className="trek-link" href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener noreferrer" title="Abre Moon Trek; introduce allí las coordenadas mostradas">Abrir NASA Moon Trek ↗</a></div><ChevronRight size={18}/></div><CoordinateForm site={site} onPick={pickCoordinate}/></section>
             <section className="panel horizon-panel"><div className="panel-heading"><div><span className="section-kicker">02 / VISUALIZACIÓN</span><h2>Horizonte local</h2></div><span className="timestamp"><Clock3 size={14}/> {formatHour(date, hour)}</span></div><Horizon scenario={scenario} hour={hour}/><div className="horizon-status"><span className={`status-badge ${currentSample.sunVisible ? 'good' : 'bad'}`}><Sun size={14}/>{currentSample.sunVisible ? 'Sol visible' : 'Sol oculto'}</span><span className={`status-badge ${currentSample.earthVisible ? 'good blue-badge' : 'bad'}`}><Radio size={14}/>{currentSample.earthVisible ? 'Tierra visible' : 'Tierra oculta'}</span><span className="horizon-note">Elevación respecto al horizonte local</span></div></section>
-            <section className="panel controls-panel"><div className="panel-heading"><div><span className="section-kicker">03 / CONFIGURACIÓN</span><h2>Parámetros de misión</h2></div><Settings2 size={18} className="muted-icon"/></div><label className="field-label" htmlFor="date">FECHA DE INICIO (UTC)</label><input className="date-input" id="date" type="date" value={date} onChange={e => setDate(e.target.value || initialDate)}/><div className="control-divider"/><div className="field-label">MODO DE ANÁLISIS</div><div className="mode-toggle"><button className={mode === 'explorer' ? 'active' : ''} onClick={() => setMode('explorer')}>Explorer</button><button className={mode === 'analyst' ? 'active' : ''} onClick={() => setMode('analyst')}>Analyst</button></div><div className="control-divider"/><div className="field-label">VENTANA TEMPORAL</div><button className="select-like" title="El MVP analiza siete días">7 días <ChevronDown size={16}/></button><p className="field-hint">Muestras cada hora · {scenario.samples.length} puntos</p>{mode === 'analyst' && <div className="analyst-fields"><label>Sol visible mínimo <strong>{minSun}%</strong><input type="range" min="0" max="100" value={minSun} onChange={e => setMinSun(Number(e.target.value))}/></label><label>Tierra visible mínimo <strong>{minEarth}%</strong><input type="range" min="0" max="100" value={minEarth} onChange={e => setMinEarth(Number(e.target.value))}/></label><label>Blackout máximo <strong>{maxBlackout} h</strong><input type="range" min="0" max="72" value={maxBlackout} onChange={e => setMaxBlackout(Number(e.target.value))}/></label></div>}</section>
+            <section className="panel controls-panel"><div className="panel-heading"><div><span className="section-kicker">03 / CONFIGURACIÓN</span><h2>Parámetros de misión</h2></div><Settings2 size={18} className="muted-icon"/></div><label className="field-label" htmlFor="date">FECHA DE INICIO (UTC)</label><input className="date-input" id="date" type="date" value={date} onChange={e => selectDate(e.target.value || initialDate)}/><div className="control-divider"/><div className="field-label">MODO DE ANÁLISIS</div><div className="mode-toggle"><button className={mode === 'explorer' ? 'active' : ''} onClick={() => setMode('explorer')}>Explorer</button><button className={mode === 'analyst' ? 'active' : ''} onClick={() => setMode('analyst')}>Analyst</button></div><div className="control-divider"/><div className="field-label">VENTANA TEMPORAL</div><button className="select-like" title="El MVP analiza siete días">7 días <ChevronDown size={16}/></button><p className="field-hint">Muestras cada hora · {scenario.samples.length} puntos</p>{mode === 'analyst' && <div className="analyst-fields"><label>Sol visible mínimo <strong>{minSun}%</strong><input type="range" min="0" max="100" value={minSun} onChange={e => setMinSun(Number(e.target.value))}/></label><label>Tierra visible mínimo <strong>{minEarth}%</strong><input type="range" min="0" max="100" value={minEarth} onChange={e => setMinEarth(Number(e.target.value))}/></label><label>Blackout máximo <strong>{maxBlackout} h</strong><input type="range" min="0" max="72" value={maxBlackout} onChange={e => setMaxBlackout(Number(e.target.value))}/></label></div>}</section>
           </div>
           <div className="metrics-heading"><div><span className="section-kicker">MISSION INTELLIGENCE</span><h2>Resumen de condiciones</h2></div><span className="period-label"><Clock3 size={15}/> Periodo de 7 días {loading && '· Actualizando...'}</span></div>
           <div className="metric-grid"><MetricCard icon={<Sun size={20}/>} label="Visibilidad solar" value={m.sunPercent} suffix="%" color="amber-bg" detail="Tiempo con Sol sobre el relieve"/><MetricCard icon={<Earth size={20}/>} label="Visibilidad terrestre" value={m.earthPercent} suffix="%" color="blue-bg" detail="Línea de vista directa"/><MetricCard icon={<Moon size={20}/>} label="Oscuridad más larga" value={m.longestDark} suffix="h" color="purple-bg" detail="Intervalo continuo sin Sol"/><MetricCard icon={<Radio size={20}/>} label="Blackout máximo" value={m.longestBlackout} suffix="h" color="mint-bg" detail="Sin visibilidad terrestre"/></div>
           <div className="lower-grid"><section className="panel timeline-panel"><div className="panel-heading"><div><span className="section-kicker">04 / EVOLUCIÓN TEMPORAL</span><h2>Línea de tiempo de misión</h2></div><span className="timeline-help"><span className="legend-dot sun"/> Luz solar <span className="legend-dot earth"/> Tierra visible</span></div><Timeline scenario={scenario} hour={hour} onHourChange={setHour}/></section><section className="panel feasibility-panel"><div className="panel-heading"><div><span className="section-kicker">05 / EVALUACIÓN</span><h2>Factibilidad</h2></div><Gauge size={18} className="muted-icon"/></div><div className="feasibility-top"><div className={`score-orb ${status.feasible ? 'pass' : ''}`}>{status.count}<small>/3</small></div><div><strong>{status.feasible ? 'Cumple los criterios' : 'Revisar restricciones'}</strong><span>{status.count} de 3 condiciones satisfechas</span></div></div><div className="criteria-list"><div><span className={status.passed[0] ? 'criteria-ok' : 'criteria-no'}>{status.passed[0] ? <Check size={13}/> : <X size={13}/>}</span> Luz solar ≥ {minSun}% <strong>{m.sunPercent}%</strong></div><div><span className={status.passed[1] ? 'criteria-ok' : 'criteria-no'}>{status.passed[1] ? <Check size={13}/> : <X size={13}/>}</span> Tierra visible ≥ {minEarth}% <strong>{m.earthPercent}%</strong></div><div><span className={status.passed[2] ? 'criteria-ok' : 'criteria-no'}>{status.passed[2] ? <Check size={13}/> : <X size={13}/>}</span> Blackout ≤ {maxBlackout} h <strong>{m.longestBlackout} h</strong></div></div><button className="text-button" onClick={() => setMode('analyst')}>Ajustar criterios <ArrowRight size={15}/></button></section></div>
-        </> : <div className="compare-layout"><section className="panel comparison-panel"><div className="panel-heading"><div><span className="section-kicker">COMPARACIÓN DE ESCENARIOS</span><h2>Dos sitios, una ventana temporal</h2></div><span className="period-label"><Clock3 size={14}/> {date} · 7 días</span></div><div className="comparison-selectors"><div><label>SITIO A</label><div className="site-select-display"><MapPin size={17}/>{site.name}</div></div><span className="versus">VS</span><div><label htmlFor="compare-site">SITIO B</label><select id="compare-site" value={compareId} onChange={e => setCompareId(e.target.value)}>{SITES.filter(s => s.id !== site.id).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div></div><div className="comparison-table"><div className="table-head"><span>MÉTRICA</span><strong>{site.name}</strong><strong>{compared.site.name}</strong></div>{[['Visibilidad solar', `${m.sunPercent}%`, `${compareMetrics.sunPercent}%`, m.sunPercent, compareMetrics.sunPercent], ['Visibilidad terrestre', `${m.earthPercent}%`, `${compareMetrics.earthPercent}%`, m.earthPercent, compareMetrics.earthPercent], ['Oscuridad más larga', `${m.longestDark} h`, `${compareMetrics.longestDark} h`, -m.longestDark, -compareMetrics.longestDark], ['Blackout máximo', `${m.longestBlackout} h`, `${compareMetrics.longestBlackout} h`, -m.longestBlackout, -compareMetrics.longestBlackout], ['Disponibilidad simultánea', `${m.concurrentPercent}%`, `${compareMetrics.concurrentPercent}%`, m.concurrentPercent, compareMetrics.concurrentPercent]].map(([name, a, b, av, bv]) => <div className="table-row" key={String(name)}><span>{name}</span><strong className={Number(av) > Number(bv) ? 'winner' : ''}>{a}{Number(av) > Number(bv) && <ArrowUpRight size={14}/>}</strong><strong className={Number(bv) > Number(av) ? 'winner' : ''}>{b}{Number(bv) > Number(av) && <ArrowUpRight size={14}/>}</strong></div>)}</div></section><section className="panel compare-aside"><span className="section-kicker">ANÁLISIS RÁPIDO</span><h2>Balance de misión</h2><p>Compara luz, comunicaciones y continuidad durante el mismo periodo.</p><div className="compare-mini"><span><Sun size={17}/> Ventaja solar</span><strong>{m.sunPercent >= compareMetrics.sunPercent ? site.name : compared.site.name} <ArrowDownRight size={15}/></strong></div><div className="compare-mini"><span><Radio size={17}/> Ventaja de comunicación</span><strong>{m.earthPercent >= compareMetrics.earthPercent ? site.name : compared.site.name} <ArrowDownRight size={15}/></strong></div><div className="compare-mini"><span><ShieldCheck size={17}/> Cumplimiento</span><strong>{verdict(m, minSun, minEarth, maxBlackout).count} / 3 vs {verdict(compareMetrics, minSun, minEarth, maxBlackout).count} / 3</strong></div><button className="primary-button full" onClick={() => { setSite(compared.site); setTab('overview') }}>Explorar {compared.site.name} <ArrowRight size={16}/></button></section></div>}
+        </> : <div className="compare-layout"><section className="panel comparison-panel"><div className="panel-heading"><div><span className="section-kicker">COMPARACIÓN DE ESCENARIOS</span><h2>Dos sitios, una ventana temporal</h2></div><span className="period-label"><Clock3 size={14}/> {date} · 7 días</span></div><div className="comparison-selectors"><div><label>SITIO A</label><div className="site-select-display"><MapPin size={17}/>{site.name}</div></div><span className="versus">VS</span><div><label htmlFor="compare-site">SITIO B</label><select id="compare-site" value={compareId} onChange={e => setCompareId(e.target.value)}>{SITES.filter(s => s.id !== site.id).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div></div><div className="comparison-table"><div className="table-head"><span>MÉTRICA</span><strong>{site.name} · {scenario.source === 'api' ? 'API' : 'DEMO'}</strong><strong>{compared.site.name} · {compared.source === 'api' ? 'API' : 'DEMO'}</strong></div>{[['Visibilidad solar', `${m.sunPercent}%`, `${compareMetrics.sunPercent}%`, m.sunPercent, compareMetrics.sunPercent], ['Visibilidad terrestre', `${m.earthPercent}%`, `${compareMetrics.earthPercent}%`, m.earthPercent, compareMetrics.earthPercent], ['Oscuridad más larga', `${m.longestDark} h`, `${compareMetrics.longestDark} h`, -m.longestDark, -compareMetrics.longestDark], ['Blackout máximo', `${m.longestBlackout} h`, `${compareMetrics.longestBlackout} h`, -m.longestBlackout, -compareMetrics.longestBlackout], ['Disponibilidad simultánea', `${m.concurrentPercent}%`, `${compareMetrics.concurrentPercent}%`, m.concurrentPercent, compareMetrics.concurrentPercent]].map(([name, a, b, av, bv]) => <div className="table-row" key={String(name)}><span>{name}</span><strong className={Number(av) > Number(bv) ? 'winner' : ''}>{a}{Number(av) > Number(bv) && <ArrowUpRight size={14}/>}</strong><strong className={Number(bv) > Number(av) ? 'winner' : ''}>{b}{Number(bv) > Number(av) && <ArrowUpRight size={14}/>}</strong></div>)}</div></section><section className="panel compare-aside"><span className="section-kicker">ANÁLISIS RÁPIDO</span><h2>Balance de misión</h2><p>Compara luz, comunicaciones y continuidad durante el mismo periodo.</p><div className="compare-mini"><span><Sun size={17}/> Ventaja solar</span><strong>{m.sunPercent >= compareMetrics.sunPercent ? site.name : compared.site.name} <ArrowDownRight size={15}/></strong></div><div className="compare-mini"><span><Radio size={17}/> Ventaja de comunicación</span><strong>{m.earthPercent >= compareMetrics.earthPercent ? site.name : compared.site.name} <ArrowDownRight size={15}/></strong></div><div className="compare-mini"><span><ShieldCheck size={17}/> Cumplimiento</span><strong>{verdict(m, minSun, minEarth, maxBlackout).count} / 3 vs {verdict(compareMetrics, minSun, minEarth, maxBlackout).count} / 3</strong></div><button className="primary-button full" onClick={() => selectSite(compared.site)}>Explorar {compared.site.name} <ArrowRight size={16}/></button></section></div>}
         <footer><span>© 2026 LUNARPATH AI · NASA SPACE APPS CHALLENGE</span><span>{scenario.source === 'api' && compared.source === 'api' && !apiError ? 'EFEMÉRIDES JPL / RELIEVE LOLA / UTC' : 'INTERFAZ DEMO / UTC / DATOS NO VALIDADOS'}</span></footer>
       </main>
     </div>

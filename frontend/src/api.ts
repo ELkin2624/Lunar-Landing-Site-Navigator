@@ -1,4 +1,4 @@
-import { makeDemoScenario, type Scenario, type Site, type Sample } from './data'
+import { makeDemoScenario, type Scenario, type Site, type Sample, type HorizonPoint } from './data'
 
 const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const useApi = import.meta.env.VITE_USE_API === 'true'
@@ -21,12 +21,20 @@ export async function analyze(site: Site, date: string, signal?: AbortSignal): P
     if (!data || typeof data !== 'object' || !('samples' in data) || !Array.isArray(data.samples) || data.samples.length < 2) throw new Error('Formato de respuesta inválido')
     const samples: Sample[] = data.samples.map((item: Record<string, unknown>, i: number) => ({
       hour: Number(item.hour ?? i),
+      sunAzimuth: Number(item.sun_azimuth), earthAzimuth: Number(item.earth_azimuth),
       sunElevation: Number(item.sun_elevation), earthElevation: Number(item.earth_elevation),
       horizonSun: Number(item.horizon_sun ?? 0), horizonEarth: Number(item.horizon_earth ?? 0),
       sunVisible: Boolean(item.sun_visible), earthVisible: Boolean(item.earth_visible),
     }))
     if (samples.some(s => !Number.isFinite(s.sunElevation) || !Number.isFinite(s.earthElevation))) throw new Error('Datos incompletos')
+    if (samples.some(s => !Number.isFinite(s.sunAzimuth) || !Number.isFinite(s.earthAzimuth))) throw new Error('Faltan azimuts del backend')
     const raw = data as { metrics?: Record<string, unknown> }
+    const rawProfile = (data as { horizon_profile?: unknown }).horizon_profile
+    if (!Array.isArray(rawProfile) || rawProfile.length < 2) throw new Error('Falta el perfil de horizonte LOLA')
+    const horizonProfile: HorizonPoint[] = rawProfile.map((point: Record<string, unknown>) => ({
+      azimuth: Number(point.azimuth_deg), elevation: Number(point.elevation_deg),
+    }))
+    if (horizonProfile.some(p => !Number.isFinite(p.azimuth) || !Number.isFinite(p.elevation))) throw new Error('Perfil de horizonte inválido')
     const supplied = raw.metrics
     if (!supplied) throw new Error('Faltan métricas del backend')
     const apiMetrics = {
@@ -35,6 +43,6 @@ export async function analyze(site: Site, date: string, signal?: AbortSignal): P
       longestBlackout: Number(supplied.longestBlackout),
     }
     if (Object.values(apiMetrics).some(value => !Number.isFinite(value))) throw new Error('Métricas inválidas del backend')
-    return { site, start: date, hours: 168, samples, source: 'api', apiMetrics }
+    return { site, start: date, hours: 168, samples, source: 'api', apiMetrics, horizonProfile }
   }
 }
