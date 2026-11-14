@@ -3,11 +3,12 @@ export type Sample = { hour: number; sunElevation: number; earthElevation: numbe
 export type Scenario = { site: Site; start: string; hours: number; samples: Sample[]; source: 'demo' | 'api'; apiMetrics?: Metrics }
 export type Metrics = { sunPercent: number; earthPercent: number; concurrentPercent: number; longestDark: number; longestBlackout: number }
 
-// Estos puntos son muestras de interfaz, no ubicaciones de aterrizaje validadas.
+// Mouton, Malapert y Haworth usan el centro oficial del IAU Gazetteer; de Gerlache Rim 2 es aproximado.
+// No son ubicaciones de aterrizaje validadas.
 export const SITES: Site[] = [
-  { id: 'mouton', name: 'Mons Mouton', region: 'Región Artemis III', lat: -85.4, lon: -29.2, x: 40, y: 29, note: 'Meseta elevada, próxima al polo sur' },
-  { id: 'malapert', name: 'Malapert Massif', region: 'Región Artemis III', lat: -86.0, lon: 3.8, x: 66, y: 42, note: 'Relieve alto y horizonte complejo' },
-  { id: 'haworth', name: 'Haworth', region: 'Región Artemis III', lat: -87.6, lon: -4.1, x: 50, y: 64, note: 'Entorno de cráter de sombra persistente' },
+  { id: 'mouton', name: 'Mons Mouton', region: 'Región Artemis III', lat: -84.6, lon: 31.0, x: 40, y: 29, note: 'Macizo elevado, próximo al polo sur' },
+  { id: 'malapert', name: 'Mons Malapert', region: 'Región Artemis III', lat: -85.98, lon: -1.67, x: 66, y: 42, note: 'Relieve alto y horizonte complejo' },
+  { id: 'haworth', name: 'Haworth (fondo)', region: 'Región Polar Sur', lat: -87.45, lon: -5.17, x: 50, y: 64, note: 'Fondo de cráter en sombra permanente' },
   { id: 'gerlache', name: 'de Gerlache Rim 2', region: 'Región Artemis III', lat: -88.3, lon: -59.5, x: 28, y: 66, note: 'Borde de cráter próximo al polo' },
 ]
 
