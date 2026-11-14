@@ -1,0 +1,143 @@
+{
+  "source": "NASA/JPL Solar System Dynamics - Horizons API",
+  "reference_frame": "IAU MOON_ME (Mean Earth / Polar Axis)",
+  "south_pole_site": {
+    "lon_deg": 0.0,
+    "lat_deg": -89.9,
+    "center": "coord@301"
+  },
+  "records": [
+    {
+      "date_ut": "2026-Nov-14 22:00",
+      "illuminated_fraction_pct": 26.53582,
+      "earth_sub_lon_deg": 357.498803,
+      "earth_sub_lat_deg": 3.404639,
+      "sun_sub_lon_deg": 115.446792,
+      "sun_sub_lat_deg": -1.557086,
+      "earth_moon_distance_km": 404898.4,
+      "south_pole_sun_azimuth_deg": 115.449024,
+      "south_pole_sun_elevation_deg": 1.513444
+    },
+    {
+      "date_ut": "2026-Nov-15 22:00",
+      "illuminated_fraction_pct": 35.23533,
+      "earth_sub_lon_deg": 356.133405,
+      "earth_sub_lat_deg": 2.17225,
+      "sun_sub_lon_deg": 103.266023,
+      "sun_sub_lat_deg": -1.555982,
+      "earth_moon_distance_km": 402988.3,
+      "south_pole_sun_azimuth_deg": 103.268459,
+      "south_pole_sun_elevation_deg": 1.532359
+    },
+    {
+      "date_ut": "2026-Nov-16 22:00",
+      "illuminated_fraction_pct": 44.57447,
+      "earth_sub_lon_deg": 354.881931,
+      "earth_sub_lat_deg": 0.832317,
+      "sun_sub_lon_deg": 91.091642,
+      "sun_sub_lat_deg": -1.554153,
+      "earth_moon_distance_km": 399873.8,
+      "south_pole_sun_azimuth_deg": 91.094166,
+      "south_pole_sun_elevation_deg": 1.551573
+    },
+    {
+      "date_ut": "2026-Nov-17 22:00",
+      "illuminated_fraction_pct": 54.29604,
+      "earth_sub_lon_deg": 353.839605,
+      "earth_sub_lat_deg": -0.567978,
+      "sun_sub_lon_deg": 78.924018,
+      "sun_sub_lat_deg": -1.551772,
+      "earth_moon_distance_km": 395618.3,
+      "south_pole_sun_azimuth_deg": 78.926508,
+      "south_pole_sun_elevation_deg": 1.570309
+    },
+    {
+      "date_ut": "2026-Nov-18 22:00",
+      "illuminated_fraction_pct": 64.10057,
+      "earth_sub_lon_deg": 353.104121,
+      "earth_sub_lat_deg": -1.974413,
+      "sun_sub_lon_deg": 66.763339,
+      "sun_sub_lat_deg": -1.548938,
+      "earth_moon_distance_km": 390393.1,
+      "south_pole_sun_azimuth_deg": 66.765673,
+      "south_pole_sun_elevation_deg": 1.587717
+    },
+    {
+      "date_ut": "2026-Nov-19 22:00",
+      "illuminated_fraction_pct": 73.62445,
+      "earth_sub_lon_deg": 352.766639,
+      "earth_sub_lat_deg": -3.322887,
+      "sun_sub_lon_deg": 54.609567,
+      "sun_sub_lat_deg": -1.545662,
+      "earth_moon_distance_km": 384483.2,
+      "south_pole_sun_azimuth_deg": 54.611628,
+      "south_pole_sun_elevation_deg": 1.602903
+    },
+    {
+      "date_ut": "2026-Nov-20 22:00",
+      "illuminated_fraction_pct": 82.42371,
+      "earth_sub_lon_deg": 352.89947,
+      "earth_sub_lat_deg": -4.537701,
+      "sun_sub_lon_deg": 42.462397,
+      "sun_sub_lat_deg": -1.541865,
+      "earth_moon_distance_km": 378280.1,
+      "south_pole_sun_azimuth_deg": 42.464081,
+      "south_pole_sun_elevation_deg": 1.614964
+    },
+    {
+      "date_ut": "2026-Nov-21 22:00",
+      "illuminated_fraction_pct": 89.97519,
+      "earth_sub_lon_deg": 353.540736,
+      "earth_sub_lat_deg": -5.533001,
+      "sun_sub_lon_deg": 30.321199,
+      "sun_sub_lat_deg": -1.537402,
+      "earth_moon_distance_km": 372258.0,
+      "south_pole_sun_azimuth_deg": 30.322419,
+      "south_pole_sun_elevation_deg": 1.62305
+    },
+    {
+      "date_ut": "2026-Nov-22 22:00",
+      "illuminated_fraction_pct": 95.70943,
+      "earth_sub_lon_deg": 354.678557,
+      "earth_sub_lat_deg": -6.219627,
+      "sun_sub_lon_deg": 18.184976,
+      "sun_sub_lat_deg": -1.532101,
+      "earth_moon_distance_km": 366928.1,
+      "south_pole_sun_azimuth_deg": 18.185665,
+      "south_pole_sun_elevation_deg": 1.626434
+    },
+    {
+      "date_ut": "2026-Nov-23 22:00",
+      "illuminated_fraction_pct": 99.08388,
+      "earth_sub_lon_deg": 356.240273,
+      "earth_sub_lat_deg": -6.518479,
+      "sun_sub_lon_deg": 6.052349,
+      "sun_sub_lat_deg": -1.525833,
+      "earth_moon_distance_km": 362773.5,
+      "south_pole_sun_azimuth_deg": 6.05247,
+      "south_pole_sun_elevation_deg": 1.624603
+    },
+    {
+      "date_ut": "2026-Nov-24 22:00",
+      "illuminated_fraction_pct": 99.68861,
+      "earth_sub_lon_deg": 358.093981,
+      "earth_sub_lat_deg": -6.378286,
+      "sun_sub_lon_deg": 353.921611,
+      "sun_sub_lat_deg": -1.518582,
+      "earth_moon_distance_km": 360173.4,
+      "south_pole_sun_azimuth_deg": 353.921153,
+      "south_pole_sun_elevation_deg": 1.617348
+    },
+    {
+      "date_ut": "2026-Nov-25 22:00",
+      "illuminated_fraction_pct": 97.35205,
+      "earth_sub_lon_deg": 0.066961,
+      "earth_sub_lat_deg": -5.791572,
+      "sun_sub_lon_deg": 341.790845,
+      "sun_sub_lat_deg": -1.510502,
+      "earth_moon_distance_km": 359337.2,
+      "south_pole_sun_azimuth_deg": 341.789827,
+      "south_pole_sun_elevation_deg": 1.604821
+    }
+  ]
+}
