@@ -33,6 +33,6 @@ export function EducationView({ onExplore }: { onExplore: () => void }) {
         <article><span className="education-step-icon"><Earth size={20}/></span><span className="education-step-tag">03 / COMUNICACIÓN</span><h3>Mira hacia casa</h3><p>Consulta cuándo la Tierra está por encima del horizonte local, una condición para la comunicación directa.</p></article>
       </div>
     </section>
-    <p className="education-source">Datos topográficos de NASA LRO/LOLA y efemérides JPL Horizons con propósitos educativos. El análisis es regional y no certifica la seguridad de un aterrizaje.</p>
+    <p className="education-source">Usamos mediciones del terreno lunar y posiciones reales del Sol y la Tierra. El análisis orienta la comparación de lugares y fechas, pero no certifica la seguridad de un aterrizaje.</p>
   </div>
 }

@@ -61,3 +61,9 @@
 [data-theme='light'] .detail-windows p { color: #667c95; }
 [data-theme='light'] .detail-note { color: #536e8d; background: #eaf2ff; }
 [data-theme='light'] .detail-muted { color: #718198; }
+.detail-meaning { background: #183254; border-radius: 10px; padding: 14px 16px; font-weight: 700; line-height: 1.5; }
+.detail-method { border: 1px solid #40526b; border-radius: 10px; padding: 12px 14px; margin: 16px 0; }
+.detail-method summary { cursor: pointer; font-weight: 700; }
+.detail-method p { margin: 10px 0 0; }
+[data-theme='light'] .detail-meaning { background: #e8f1ff; color: #27496e; }
+[data-theme='light'] .detail-method { border-color: #cbd9e9; }

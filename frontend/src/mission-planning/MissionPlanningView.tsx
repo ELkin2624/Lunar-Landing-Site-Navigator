@@ -3,6 +3,7 @@ import { ArrowRight, CalendarDays, Check, Earth, Lightbulb, MapPin, Sun } from '
 import { analyze } from '../api'
 import { metrics, type Scenario, type Site } from '../data'
 import { longestWindow, type Priority, type ComparisonResults } from './comparison'
+import { useLoading } from '../LoadingContext'
 import './mission-planning.css'
 
 const OrbitalView = lazy(() => import('./orbital-view/OrbitalView').then(module => ({ default: module.OrbitalView })))
@@ -13,6 +14,7 @@ const priorities: { id: Priority; title: string; description: string }[] = [
   { id: 'balanced', title: 'Equilibrio entre ambas', description: 'Busca luz y visibilidad terrestre al mismo tiempo.' },
 ]
 export function MissionPlanningView({ sites, initialDate, initialResult, onCompared }: { sites: Site[]; initialDate: string; initialResult: ComparisonResults | null; onCompared: (result: ComparisonResults) => void }) {
+  const { startLoading, stopLoading } = useLoading()
   const [date, setDate] = useState(initialResult?.date ?? initialDate)
   const [duration, setDuration] = useState(initialResult?.duration ?? 6)
   const [priority, setPriority] = useState<Priority>(initialResult?.priority ?? 'solar')
@@ -23,6 +25,16 @@ export function MissionPlanningView({ sites, initialDate, initialResult, onCompa
   const [error, setError] = useState('')
   const [controller, setController] = useState<AbortController | null>(null)
   useEffect(() => () => controller?.abort(), [controller])
+
+  useEffect(() => {
+    if (loading) {
+      const siteNames = selected.map(id => sites.find(s => s.id === id)?.name).filter(Boolean).join(' y ')
+      startLoading('planning', siteNames ? `Comparando ${siteNames}` : 'Consultando condiciones de la misión')
+    } else {
+      stopLoading('planning')
+    }
+    return () => stopLoading('planning')
+  }, [loading, selected, sites, startLoading, stopLoading])
   const resetResult = () => { controller?.abort(); setController(null); setResults(null); setLoading(false); setError('') }
   const toggleSite = (id: string) => {
     resetResult()
@@ -37,7 +49,7 @@ export function MissionPlanningView({ sites, initialDate, initialResult, onCompa
       const data = await Promise.all(chosen.map(site => analyze(site, date, nextController.signal)))
       if (!nextController.signal.aborted) { setResults(data); onCompared({ scenarios: data, date, duration, priority }) }
     } catch {
-      if (!nextController.signal.aborted) setError('No se pudieron consultar los datos. Comprueba que el backend esté disponible y vuelve a intentarlo.')
+      if (!nextController.signal.aborted) setError('No pudimos calcular las condiciones ahora. Comprueba tu conexión e inténtalo de nuevo.')
     } finally { if (!nextController.signal.aborted) setLoading(false) }
   }
   return <div className="guided">
@@ -45,11 +57,12 @@ export function MissionPlanningView({ sites, initialDate, initialResult, onCompa
     {help && <div className="guided-tip">Elige la fecha, la duración y la prioridad de tu misión. Después selecciona dos sitios en la lista y compara sus resultados.</div>}
     <div className="guided-progress" aria-label="Progreso de la misión"><span className={!results ? 'active' : ''}>1 <b>Elige fecha y sitios</b></span><ArrowRight size={15}/><span className={results ? 'active' : ''}>2 <b>Compara resultados</b></span></div>
     <div className="guided-grid"><section className="guided-config" aria-label="Configuración de misión">
-      <label className="guided-label" htmlFor="guided-date">¿Cuándo viajarás?</label><div className="guided-date"><CalendarDays size={18}/><input id="guided-date" type="date" value={date} onChange={e => { resetResult(); setDate(e.target.value) }}/></div><p className="guided-hint">Fecha de inicio UTC · ventana de 7 días</p>
-      <fieldset><legend>¿Cuántas horas seguidas necesitas?</legend><p>Duración mínima de la condición elegida.</p><div className="guided-durations">{[3, 6, 12, 24].map(value => <button type="button" key={value} aria-pressed={duration === value} className={duration === value ? 'selected' : ''} onClick={() => { resetResult(); setDuration(value) }}>{value} h</button>)}</div></fieldset>
+      <label className="guided-label" htmlFor="guided-date">¿Qué día comenzará la misión en la Luna?</label><div className="guided-date"><CalendarDays size={18}/><input id="guided-date" type="date" value={date} onChange={e => { resetResult(); setDate(e.target.value) }}/></div><p className="guided-hint">Compararemos los siete días siguientes. Las horas usan tiempo universal, igual para todos los países.</p>
+      <fieldset><legend>¿Cuántas horas seguidas necesitas?</legend><p>Por ejemplo, seis horas sin que se oculte el Sol o la Tierra, según tu prioridad.</p><div className="guided-durations">{[3, 6, 12, 24].map(value => <button type="button" key={value} aria-pressed={duration === value} className={duration === value ? 'selected' : ''} onClick={() => { resetResult(); setDuration(value) }}>{value} h</button>)}</div></fieldset>
       <fieldset><legend>¿Qué es lo más importante?</legend><div className="guided-priorities">{priorities.map(item => <label key={item.id} className={priority === item.id ? 'selected' : ''}><input type="radio" name="mission-priority" checked={priority === item.id} onChange={() => { resetResult(); setPriority(item.id) }}/><span><strong>{item.title}</strong><small>{item.description}</small></span></label>)}</div></fieldset>
-      <div className="guided-note"><Lightbulb size={18}/><span>En el polo sur, el relieve puede ocultar el Sol o la Tierra incluso cuando están por encima del horizonte geométrico.</span></div>
+      <div className="guided-note"><Lightbulb size={18}/><span>En el polo sur, las montañas y los bordes de cráter pueden tapar el Sol o la Tierra. Por eso comparamos lugares y fechas.</span></div>
     </section><section className="guided-sites" aria-label="Selección de sitios"><div className="guided-sites-heading"><div><span className="guided-kicker">POLO SUR LUNAR</span><h2>Selecciona dos sitios</h2></div><span>{selected.length} / 2 seleccionados</span></div>
+      <p className="guided-hint">Este visor muestra cómo se relacionan la Luna, el Sol y la Tierra. Puedes girarlo para explorar; los dos lugares para calcular se eligen en la lista de abajo.</p>
       <Suspense fallback={<p className="guided-hint" role="status">Abriendo visor 3D…</p>}>
         <OrbitalView />
       </Suspense>

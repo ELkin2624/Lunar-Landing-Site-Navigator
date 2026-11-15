@@ -119,8 +119,8 @@ export const SITES: Site[] = [
   { id: 'malapert', name: 'Mons Malapert', region: 'Región Artemis III', lat: -85.98, lon: -1.67, note: 'Cresta orientada hacia la Tierra', artemis: true, heightKm: 4.9 },
   { id: 'gerlache', name: 'de Gerlache Rim 2', region: 'Región Artemis III', lat: -88.3, lon: -59.5, note: 'Borde de cráter próximo al polo (cobertura 20 m)', artemis: true, heightKm: -0.1 },
   { id: 'shackleton', name: 'Shackleton Rim', region: 'Región Artemis III', lat: -89.9, lon: 0.0, note: 'Borde polar (89.9° S, cobertura 20 m)', artemis: true, heightKm: 0.7 },
-  { id: 'connecting-ridge', name: 'Connecting Ridge', region: 'Región Artemis III', lat: -89.4, lon: -137.5, note: 'Cresta entre Shackleton y de Gerlache (20 m)', artemis: true, heightKm: 1.8 },
-  { id: 'haworth', name: 'Haworth (fondo PSR)', region: 'Trampa fría polar', lat: -87.45, lon: -5.17, note: 'Fondo en sombra permanente (contraste)', artemis: false, heightKm: -3.3 },
+  { id: 'connecting-ridge', name: 'Connecting Ridge', region: 'Región Artemis III', lat: -89.4, lon: -137.5, note: 'Cresta entre los cráteres Shackleton y de Gerlache', artemis: true, heightKm: 1.8 },
+  { id: 'haworth', name: 'Haworth (cráter en sombra)', region: 'Cráter polar', lat: -87.45, lon: -5.17, note: 'Fondo de un cráter que suele permanecer en sombra', artemis: false, heightKm: -3.3 },
   { id: 'nobile', name: 'Cráter Nobile', region: 'Región Polar Sur', lat: -85.28, lon: 53.27, note: 'Zona de prospección de volátiles', artemis: false, heightKm: 0.9 },
 ]
 

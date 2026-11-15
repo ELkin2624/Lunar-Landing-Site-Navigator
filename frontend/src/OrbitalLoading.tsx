@@ -5,9 +5,33 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { disposeModel } from './three/disposeModel'
 
 const BODY_URLS = ['/luna/luna_lod.glb', '/tierra/tierra_lod.glb', '/sol/sol_lod.glb']
-const HOLD_MS = 2400
+const HOLD_MS = 1500
+const TRANSITION_MS = 900
+const CYCLE_MS = HOLD_MS + TRANSITION_MS
+const ROTATION_SPEED = 0.85
 
-export function OrbitalLoading({ siteName }: { siteName: string }) {
+interface LoadedBody {
+  pivot: THREE.Group
+  materials: THREE.Material[]
+}
+
+function setBodyBlend(body: LoadedBody, opacity: number, additive: boolean) {
+  for (const material of body.materials) {
+    material.opacity = opacity
+    if (additive) {
+      material.blending = THREE.CustomBlending
+      material.blendEquation = THREE.AddEquation
+      material.blendSrc = THREE.SrcAlphaFactor
+      material.blendDst = THREE.OneFactor
+      material.blendSrcAlpha = THREE.OneFactor
+      material.blendDstAlpha = THREE.OneFactor
+    } else {
+      material.blending = THREE.NormalBlending
+    }
+  }
+}
+
+export function OrbitalLoading({ siteName, message }: { siteName?: string; message?: string }) {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -21,6 +45,7 @@ export function OrbitalLoading({ siteName }: { siteName: string }) {
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
     renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.autoClear = false
     host.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
@@ -41,12 +66,11 @@ export function OrbitalLoading({ siteName }: { siteName: string }) {
     resize()
 
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const models: Array<THREE.Object3D | null> = BODY_URLS.map(() => null)
-    const scales = BODY_URLS.map((_, index) => (index === 0 ? 1 : 0))
-    const baseScales = BODY_URLS.map(() => 1)
-    let active = 0
+    const bodies: Array<LoadedBody | null> = BODY_URLS.map(() => null)
     let alive = true
-    const timer = reduced ? undefined : window.setInterval(() => { active = (active + 1) % BODY_URLS.length }, HOLD_MS)
+    let elapsedMs = 0
+    let rotationY = 0
+    let lastTime = performance.now()
 
     const loader = new GLTFLoader()
     BODY_URLS.forEach((url, index) => loader.load(url, gltf => {
@@ -57,43 +81,91 @@ export function OrbitalLoading({ siteName }: { siteName: string }) {
       const model = gltf.scene
       const box = new THREE.Box3().setFromObject(model)
       const size = box.getSize(new THREE.Vector3())
-      baseScales[index] = 2.2 / Math.max(size.x, size.y, size.z, 0.001)
+      const baseScale = 2.2 / Math.max(size.x, size.y, size.z, 0.001)
+
+      const materials: THREE.Material[] = []
+      model.traverse(object => {
+        if (!(object instanceof THREE.Mesh)) return
+        for (const material of [object.material].flat() as THREE.Material[]) {
+          material.side = THREE.FrontSide
+          material.transparent = true
+          material.depthTest = true
+          material.depthWrite = true
+          materials.push(material)
+        }
+      })
+
       const pivot = new THREE.Group()
       model.position.copy(box.getCenter(new THREE.Vector3())).multiplyScalar(-1)
       pivot.add(model)
-      pivot.scale.setScalar(baseScales[index] * scales[index])
-      pivot.visible = scales[index] > 0.001
-      models[index] = pivot
+      pivot.scale.setScalar(baseScale)
+      pivot.visible = false
+      bodies[index] = { pivot, materials }
       scene.add(pivot)
     }, undefined, () => undefined))
 
     renderer.setAnimationLoop(() => {
-      const previousGone = scales.every((scale, index) => index === active || scale < 0.03)
-      models.forEach((model, index) => {
-        const target = index === active && previousGone ? 1 : 0
-        scales[index] += (target - scales[index]) * (target ? 0.07 : 0.12)
-        if (!model) return
-        const eased = scales[index] < 0.001 ? 0 : scales[index]
-        model.visible = eased > 0
-        model.scale.setScalar(baseScales[index] * eased)
-        if (!reduced) model.rotation.y += 0.012 + (1 - eased) * 0.06
-      })
-      renderer.render(scene, camera)
+      const now = performance.now()
+      const dt = Math.min((now - lastTime) / 1000, 0.05)
+      lastTime = now
+
+      if (!reduced) {
+        elapsedMs += dt * 1000
+        rotationY += dt * ROTATION_SPEED
+      }
+
+      for (const body of bodies) {
+        if (!body) continue
+        body.pivot.visible = false
+        body.pivot.rotation.y = rotationY
+      }
+
+      const step = reduced ? 0 : Math.floor(elapsedMs / CYCLE_MS) % BODY_URLS.length
+      const nextStep = (step + 1) % BODY_URLS.length
+      const phase = reduced ? 0 : elapsedMs % CYCLE_MS
+      const rawT = phase <= HOLD_MS ? 0 : (phase - HOLD_MS) / TRANSITION_MS
+      const alpha = rawT * rawT * (3 - 2 * rawT)
+
+      const fromBody = bodies[step]
+      const toBody = bodies[nextStep]
+
+      renderer.clear()
+
+      if (alpha > 0.001 && fromBody && toBody) {
+        setBodyBlend(fromBody, 1 - alpha, false)
+        fromBody.pivot.visible = true
+        renderer.render(scene, camera)
+        fromBody.pivot.visible = false
+
+        renderer.clearDepth()
+
+        setBodyBlend(toBody, alpha, true)
+        toBody.pivot.visible = true
+        renderer.render(scene, camera)
+      } else {
+        const activeBody = (alpha > 0.5 ? toBody : fromBody) ?? fromBody ?? toBody ?? bodies.find(Boolean)
+        if (activeBody) {
+          setBodyBlend(activeBody, 1, false)
+          activeBody.pivot.visible = true
+          renderer.render(scene, camera)
+        }
+      }
     })
 
     return () => {
       alive = false
-      window.clearInterval(timer)
       observer.disconnect()
       renderer.setAnimationLoop(null)
-      models.forEach(model => model && disposeModel(model))
+      bodies.forEach(body => body && disposeModel(body.pivot))
       renderer.dispose()
       renderer.domElement.remove()
     }
   }, [])
 
-  return <div className="orbital-loading" role="status" aria-label={`Calculando ${siteName}`}>
+  const text = message || (siteName ? `Calculando ${siteName}` : 'Cargando')
+
+  return <div className="orbital-loading" role="status" aria-label={text}>
     <div ref={hostRef} className="orbital-loading-model"/>
-    <p className="orbital-loading-text" aria-hidden="true">Cargando<span>.</span><span>.</span><span>.</span></p>
+    <p className="orbital-loading-text" aria-hidden="true">{text}<span>.</span><span>.</span><span>.</span></p>
   </div>
 }

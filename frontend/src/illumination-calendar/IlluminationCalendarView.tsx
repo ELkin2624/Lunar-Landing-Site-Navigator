@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Sun } from 'lucide-react'
 
 import { fetchIlluminationCalendar, type IlluminationCalendar, type IlluminationDay, type IlluminationLevel } from '../api'
 import type { Site } from '../data'
+import { useLoading } from '../LoadingContext'
 import './illumination-calendar.css'
 
 const IlluminationMoon = lazy(() => import('./IlluminationMoon').then(module => ({ default: module.IlluminationMoon })))
@@ -25,6 +26,7 @@ function bestDay(days: IlluminationDay[]): IlluminationDay | undefined {
 }
 
 export function IlluminationCalendarView({ site }: { site: Site }) {
+  const { startLoading, stopLoading } = useLoading()
   const today = new Date()
   const [year, setYear] = useState(today.getUTCFullYear())
   const [month, setMonth] = useState(today.getUTCMonth() + 1)
@@ -33,6 +35,15 @@ export function IlluminationCalendarView({ site }: { site: Site }) {
   const [error, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const cache = useRef(new Map<string, IlluminationCalendar>())
+
+  useEffect(() => {
+    if (loading) {
+      startLoading('calendar', `Calculando calendario solar de ${site.name}`)
+    } else {
+      stopLoading('calendar')
+    }
+    return () => stopLoading('calendar')
+  }, [loading, site.name, startLoading, stopLoading])
 
   useEffect(() => {
     const key = `${site.lat},${site.lon},${year},${month}`
@@ -98,7 +109,7 @@ export function IlluminationCalendarView({ site }: { site: Site }) {
       <div>
         <span className="illum-kicker">CALENDARIO DE ILUMINACIÓN</span>
         <h1>{site.name}</h1>
-        <p>Porcentaje del día con el disco solar sobre el horizonte real del terreno (JPL Horizons + relieve LOLA). Elige una fecha para ver cómo ilumina el Sol a la Luna en su mejor momento.</p>
+        <p>Compara cuántas horas de luz directa recibe este lugar cada día. Un porcentaje alto indica más tiempo para alimentar paneles solares; todavía hay que revisar las necesidades de la misión.</p>
       </div>
       <div className="illum-month-nav">
         <button type="button" onClick={() => shiftMonth(-1)} aria-label="Mes anterior"><ChevronLeft size={18}/></button>
@@ -126,7 +137,7 @@ export function IlluminationCalendarView({ site }: { site: Site }) {
               {cell.day && cell.day.level !== 'none' && <span className="illum-percent">{Math.round(cell.day.sunlitPercent)}%</span>}
             </button>)}
       </div>
-      {loading && <div className="illum-overlay">Calculando efemérides y horizonte…</div>}
+      {loading && <div className="illum-overlay">Calculando la luz solar para este lugar…</div>}
       {error && <div className="illum-error">{error}</div>}
       <div className="illum-legend">
         <span><i className="level-favorable"/>Favorable · ≥{data?.thresholds.favorable ?? 70}% de luz <b>{counts.favorable}</b></span>
@@ -153,13 +164,11 @@ export function IlluminationCalendarView({ site }: { site: Site }) {
           <div className="illum-stat-grid">
             <div><span>Luz solar en el día</span><strong>{selected.sunlitPercent}%</strong></div>
             <div><span>Mejor momento</span><strong>{timeFormat.format(new Date(selected.bestTimeUtc))} UTC</strong></div>
-            <div><span>Elevación solar</span><strong>{selected.sunElevationDeg.toFixed(2)}°</strong></div>
-            <div><span>Azimut solar</span><strong>{selected.sunAzimuthDeg.toFixed(1)}°</strong></div>
-            <div><span>Margen sobre el relieve</span><strong>{selected.maxClearanceDeg > 0 ? '+' : ''}{selected.maxClearanceDeg.toFixed(2)}°</strong></div>
-            <div><span>Elevación máxima del día</span><strong>{selected.maxSunElevationDeg.toFixed(2)}°</strong></div>
+            <div><span>¿Llega luz directa este día?</span><strong>{selected.sunlitPercent > 0 ? 'Sí' : 'No'}</strong></div>
           </div>
           {best && best.date !== selected.date && <button type="button" className="illum-best" onClick={() => setSelectedDate(best.date)}><Sun size={15}/> Ir al mejor día del mes ({Number(best.date.slice(8))}, {best.sunlitPercent}%)</button>}
-          <p className="illum-note">El margen sobre el relieve es la diferencia entre la elevación del Sol y el horizonte del terreno en esa dirección: un valor negativo significa que el Sol queda oculto tras montañas o bordes de cráter. Horizonte: {data?.horizonSource === 'LOLA_20M_NEAR_240M_FAR' ? 'LOLA 20 m (≤5 km) + 240 m' : 'LOLA 240 m'}.</p>
+          <p className="illum-note">El porcentaje indica cuánto tiempo del día llega luz solar directa a este lugar. Las montañas y los bordes de cráter pueden ocultar el Sol.</p>
+          <details className="illum-note"><summary>Ver datos de posición y procedencia</summary><p>Altura del Sol: {selected.sunElevationDeg.toFixed(2)}°. Dirección: {selected.sunAzimuthDeg.toFixed(1)}°. Separación respecto al terreno: {selected.maxClearanceDeg.toFixed(2)}°. Posiciones: JPL Horizons. Relieve: NASA LOLA {data?.horizonSource === 'LOLA_20M_NEAR_240M_FAR' ? '20 m cercano y 240 m lejano' : '240 m'}.</p></details>
         </> : <p className="illum-note">{loading ? 'Calculando…' : 'Sin datos para este mes.'}</p>}
       </div>
     </section>
