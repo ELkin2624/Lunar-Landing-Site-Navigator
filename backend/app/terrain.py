@@ -10,6 +10,7 @@ from .models import HorizonPoint, Site
 
 REFERENCE_RADIUS_M = 1_737_400.0
 PRODUCT_ID = "LDEM_75S_240M"
+FINE_PRODUCT_ID = "LDEM_875S_20M"
 
 
 class TerrainError(Exception):
@@ -30,8 +31,9 @@ class LolaDem:
         if not image_path.is_file() or not label_path.is_file():
             raise TerrainError("LOLA IMG and LBL files must be in the same directory")
         label = label_path.read_text(encoding="ascii")
-        if f'FILE_NAME                 = "{PRODUCT_ID}.IMG"' not in label.upper():
-            raise TerrainError("Unsupported LOLA product; expected LDEM_75S_240M")
+        self.product_id = image_path.stem.upper()
+        if self.product_id not in (PRODUCT_ID, FINE_PRODUCT_ID) or f'FILE_NAME                 = "{self.product_id}.IMG"' not in label.upper():
+            raise TerrainError("Unsupported LOLA product")
         if 'COORDINATE_SYSTEM_NAME       = "MEAN EARTH/POLAR AXIS OF DE421"' not in label.upper():
             raise TerrainError("Unexpected lunar coordinate frame")
         if "SAMPLE_TYPE           = LSB_INTEGER" not in label.upper() or "SAMPLE_BITS           = 16" not in label.upper():
@@ -40,7 +42,8 @@ class LolaDem:
         self.scale_m = _label_number(label, "MAP_SCALE")
         self.height_scale = _label_number(label, "SCALING_FACTOR")
         self.radius_m = _label_number(label, "OFFSET")
-        if self.size != 3812 or self.scale_m != 240 or self.radius_m != REFERENCE_RADIUS_M:
+        expected_size, expected_scale = (3812, 240) if self.product_id == PRODUCT_ID else (7584, 20)
+        if self.size != expected_size or self.scale_m != expected_scale or self.radius_m != REFERENCE_RADIUS_M:
             raise TerrainError("Unexpected LOLA grid geometry or reference radius")
         if image_path.stat().st_size != self.size * self.size * 2:
             raise TerrainError("LOLA IMG size does not match its label")
@@ -57,7 +60,8 @@ class LolaDem:
     def __exit__(self, *_: object) -> None:
         self.close()
 
-    def height_m(self, latitude_deg: float, longitude_deg: float) -> float:
+    def pixel_index(self, latitude_deg: float, longitude_deg: float) -> tuple[int, int]:
+        """Nearest grid cell (row, col) for a geographic coordinate."""
         if latitude_deg > -75 or latitude_deg < -90:
             raise TerrainError("Site or ray is outside the LOLA south pole coverage")
         angular_radius = math.radians(90 + latitude_deg) / 2
@@ -68,8 +72,32 @@ class LolaDem:
         row = round((self.size - 1) / 2 - rho * math.cos(longitude) / self.scale_m)
         if not 0 <= row < self.size or not 0 <= col < self.size:
             raise TerrainError("Site or ray is outside the LOLA image")
+        return row, col
+
+    def pixel_height_m(self, row: int, col: int) -> float:
+        if not 0 <= row < self.size or not 0 <= col < self.size:
+            raise TerrainError("Requested cell is outside the LOLA image")
         dn = struct.unpack_from("<h", self._data, 2 * (row * self.size + col))[0]
         return dn * self.height_scale
+
+    def pixel_ground_spacing_m(self, row: int, col: int) -> float:
+        """Ground distance of one grid step at a cell.
+
+        Polar stereographic scale factor k = sec²(c/2), with c the angular
+        distance from the pole; one grid step spans MAP_SCALE / k on the sphere.
+        """
+        dx = (col - (self.size - 1) / 2) * self.scale_m
+        dy = (row - (self.size - 1) / 2) * self.scale_m
+        half_colatitude = math.atan(math.hypot(dx, dy) / (2 * self.radius_m))
+        return self.scale_m * math.cos(half_colatitude) ** 2
+
+    def pixel_longitude_deg(self, row: int, col: int) -> float:
+        dx = col - (self.size - 1) / 2
+        dy = (self.size - 1) / 2 - row
+        return 0.0 if dx == 0 and dy == 0 else math.degrees(math.atan2(dx, dy))
+
+    def height_m(self, latitude_deg: float, longitude_deg: float) -> float:
+        return self.pixel_height_m(*self.pixel_index(latitude_deg, longitude_deg))
 
 
 def _destination(latitude_deg: float, longitude_deg: float, azimuth_deg: float, distance_m: float) -> tuple[float, float]:

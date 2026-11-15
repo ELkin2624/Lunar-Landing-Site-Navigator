@@ -233,6 +233,8 @@ def test_csv_export():
         assert "attachment" in res.headers["content-disposition"]
         text = res.text
         assert "time_utc,hour_offset,sun_azimuth_deg" in text
+        assert "ephemeris_source,horizon_source,dem_pixel_scale_m" in text
+        assert "JPL Horizons" in text
         lines = text.strip().split("\n")
         assert len(lines) == 5  # header + 4 rows
 

@@ -210,6 +210,11 @@ class LegacyAnalyzeResponse(BaseModel):
     horizon_profile: list[HorizonPoint] | None = None
     source: str = "api"
     metrics: dict
+    ephemeris_source: str = "JPL Horizons"
+    dem_pixel_scale_m: float | None = None
+    sampling_minutes: int = 60
+    transition_uncertainty_minutes: int = 60
+    precision_note: str = "Transition times are estimated within the sampling bracket. Shorter events may be missed."
 
 
 class EphemerisRequest(BaseModel):

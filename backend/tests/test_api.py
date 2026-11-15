@@ -143,6 +143,9 @@ def test_evaluate_with_dem(monkeypatch, tmp_path):
         assert len(legacy.json()["horizon_profile"]) == 360
         assert legacy.json()["samples"][0]["sun_azimuth"] == 90
         assert legacy.json()["samples"][0]["earth_azimuth"] == 90
+        assert legacy.json()["ephemeris_source"] == "JPL Horizons"
+        assert legacy.json()["dem_pixel_scale_m"] == 240
+        assert legacy.json()["transition_uncertainty_minutes"] == 60
         horizon = client.post("/api/v1/terrain/horizon", json={"site": payload["site"], "max_distance_km": 1})
         assert horizon.status_code == 200, horizon.text
         assert len(horizon.json()["profile"]) == 360

@@ -12,10 +12,11 @@ En PowerShell, desde `backend`:
 py -3.12 -m venv .venv
 .venv\Scripts\python -m pip install -e '.[dev]'
 .venv\Scripts\python scripts/download_lola.py
+.venv\Scripts\python scripts/download_lola.py --highres
 .venv\Scripts\python -m uvicorn app.main:app --reload
 ```
 
-API en `http://127.0.0.1:8000`; documentación interactiva en `/docs`. Se requiere conexión a JPL Horizons para evaluar escenarios. `GET /health` solo comprueba que el proceso responde. La descarga de LOLA es pública y **no requiere API key**.
+API en `http://127.0.0.1:8000`; documentación interactiva en `/docs`. Se requiere conexión a JPL Horizons para evaluar escenarios. `GET /health` solo comprueba que el proceso responde. La descarga de LOLA es pública y **no requiere API key**. `--highres` descarga además 115 MB del producto `LDEM_875S_20M`, que cubre desde 87,5° S hasta el polo; se usa para la malla 3D local cuando la ventana de 2 km cabe dentro de su cobertura.
 
 El backend lee automáticamente `backend/.env` si existe. Puedes copiar `.env.example`. `LUNARPATH_DEM_PATH` permite usar otra ubicación del mismo producto; `LUNARPATH_CORS_ORIGINS` define una lista de orígenes del frontend separada por comas. Ninguna clave de NASA va en `.env` para este módulo.
 
@@ -25,6 +26,7 @@ El backend lee automáticamente `backend/.env` si existe. Puedes copiar `.env.ex
 - `GET /api/v1/sites` o `GET /api/v1/catalog/sites`: lista de regiones y sitios candidatos oficiales de NASA Artemis III (Mons Mouton, Malapert Massif, Haworth, de Gerlache, Shackleton, Nobile, etc.) con metadatos científicos y coordenadas. Filtros opcionales: `artemis_only=true`, `query="malapert"`.
 - `GET /api/v1/sites/{site_id}`: detalles, elevación estimada y justificación científica de un sitio.
 - `GET /api/v1/sites/{site_id}/horizon`: cálculo del perfil topográfico 360° para un sitio del catálogo con DEM LOLA.
+- `GET /api/v1/sites/{site_id}/slope`: cálculo de pendiente regional multiescala (240 m, 480 m, 960 m) y estadísticas de vecindario con DEM LOLA para un sitio del catálogo.
 
 ### 2. Efemérides Astronómicas (JPL Horizons)
 - `POST /api/v1/ephemeris`: consulta directa y cacheada de series temporales de azimut y elevación del Sol (10) y la Tierra (399).
@@ -36,6 +38,8 @@ El backend lee automáticamente `backend/.env` si existe. Puedes copiar `.env.ex
 - `POST /api/v1/scenarios/compare`: evaluación paralela de 2 a 5 escenarios.
 - `POST /api/v1/scenarios/rank`: comparador avanzado con sistema de puntuación ponderada (0–100), ranking, fortalezas (highlights) y compromisos (trade-offs).
 - `POST /api/v1/terrain/horizon`: perfil de horizonte LOLA a medida para cualquier coordenada polar.
+- `POST /api/v1/terrain/slope`: pendiente regional LOLA (operador de Horn 3×3 corregido por factor de escala estereográfico polar, bases efectivas de ~480 m, ~960 m y ~1920 m, estadísticas circulares y comparación contra un umbral configurable por el usuario sin clasificar ningún punto como «aterrizaje seguro»).
+- `POST /api/v1/terrain/mesh`: malla local de 101 × 101 celdas a 20 m/píxel donde hay cobertura, o de 41 × 41 celdas a 240 m/píxel en el resto. Devuelve cotas, espaciado, centro proyectado, fuente y proyección. El horizonte y la pendiente regional del análisis principal siguen usando 240 m/píxel.
 
 ### 4. Mission Delta (Diferenciador Clave)
 - `POST /api/v1/scenarios/delta`: analiza el impacto operativo de reprogramaciones de misión (retraso en días/horas) o desplazamientos espaciales del alunizaje (distancia en metros y rumbo en azimut), calculando variaciones en iluminación, comunicación, noches máximas y nivel de riesgo ("LOW", "MODERATE", "CRITICAL").
@@ -48,7 +52,7 @@ El backend lee automáticamente `backend/.env` si existe. Puedes copiar `.env.ex
 - `POST /api/v1/copilot/parse-constraints`: traductor de instrucciones en lenguaje natural a restricciones estructuradas de misión (`Constraints`).
 
 ### 7. Exportación y Compatibilidad con Frontend
-- `POST /api/v1/scenarios/export/csv`: exporta las series temporales completas a un archivo CSV descargable para análisis en Excel, MATLAB o Python.
+- `POST /api/v1/scenarios/export/csv`: exporta las series temporales completas con coordenadas, fuentes, resolución del DEM, paso temporal y amplitud del intervalo de transición.
 - `POST /api/scenarios/analyze`: endpoint adaptador retrocompatible con el frontend React de LunarPath (`frontend/src/api.ts`).
 
 
@@ -85,10 +89,16 @@ El DEM incluido cubre el polo sur hasta 75° S, con 240 m por píxel. El cálcul
 
 Sin refinamiento, el intervalo de incertidumbre temporal de un cambio puede alcanzar `step_minutes`. Con exploración densa, se reduce a `refinement_step_minutes` para los cambios detectados; las métricas usan el punto medio de cada intervalo. El intervalo máximo es 14 días y 500 pasos en modo normal, o 5000 en modo denso. Los tiempos de entrada deben incluir zona horaria y se normalizan a UTC. Una caída o respuesta inesperada de Horizons devuelve HTTP 502.
 
+## Sensibilidad reproducible
+
+Desde `backend`, ejecuta `.venv\Scripts\python scripts/validate_resolution.py` para actualizar [`docs/VALIDACION_RESOLUCION.json`](../docs/VALIDACION_RESOLUCION.json). Compara pasos de 60, 15 y 5 minutos y horizontes con el DEM LOLA original de 240 m y versiones promediadas a 480 y 960 m. Requiere el DEM local y acceso a JPL Horizons. Las versiones de menor resolución proceden del mismo producto, por lo que la prueba no constituye una validación independiente. El método y los resultados están en [`docs/VALIDACION_CIENTIFICA.md`](../docs/VALIDACION_CIENTIFICA.md).
+
+`scripts/validate_highres.py` compara cotas, pendientes y horizontes del DEM de 240 m con el producto de 20 m en tres puntos cubiertos. Para el contraste orbital ejecuta `pip install -e '.[validation]'`, `python scripts/download_validation_kernels.py` y `python scripts/validate_spice.py`. Descarga los kernels de [NAIF](https://naif.jpl.nasa.gov/naif/data_generic.html) y [INPOP19a alojado por ESA](https://spiftp.esac.esa.int/data/SPICE/JUICE/kernels/spk/); el informe queda en [`docs/VALIDACION_SPICE.json`](../docs/VALIDACION_SPICE.json). Los binarios de DEM y kernels no se versionan por su tamaño. INPOP19a aporta una órbita independiente, aunque la orientación lunar permanece en DE440.
+
 ## Próximos módulos
 
-1. Usar un DEM de mayor resolución en sitios finalistas y cuantificar la sensibilidad al tamaño de píxel.
-2. Estimar métricas con una cuadrícula adaptativa y validar cruces contra casos de referencia de Horizons.
-3. Añadir catálogo de coordenadas documentadas y caché persistente para demostraciones.
+1. Contrastar horizonte, pendientes y cotas con un DEM georreferenciado independiente de mayor resolución en sitios con cobertura.
+2. Comparar posiciones y cruces de visibilidad contra referencias orbitales independientes, incluyendo variación de fecha y lugar.
+3. Registrar calidad, cobertura, fecha y licencia de cada producto cartográfico utilizado.
 
 Fuentes: [API Horizons](https://ssd-api.jpl.nasa.gov/doc/horizons.html), [datos LOLA en NASA PDS](https://pds-geosciences.wustl.edu/missions/lro/lola.htm).

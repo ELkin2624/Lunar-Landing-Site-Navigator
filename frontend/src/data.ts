@@ -1,7 +1,8 @@
 export type Site = { id: string; name: string; region: string; lat: number; lon: number; note: string }
 export type Sample = { hour: number; sunElevation: number; earthElevation: number; sunAzimuth?: number; earthAzimuth?: number; horizonSun: number; horizonEarth: number; sunVisible: boolean; earthVisible: boolean }
 export type HorizonPoint = { azimuth: number; elevation: number }
-export type Scenario = { site: Site; start: string; hours: number; samples: Sample[]; source: 'demo' | 'api'; apiMetrics?: Metrics; horizonProfile?: HorizonPoint[] }
+export type Provenance = { ephemerisSource: string; horizonSource: string; demPixelScaleM: number | null; samplingMinutes: number; transitionUncertaintyMinutes: number; precisionNote: string }
+export type Scenario = { site: Site; start: string; hours: number; samples: Sample[]; source: 'unavailable' | 'api'; apiMetrics?: Metrics; horizonProfile?: HorizonPoint[]; provenance?: Provenance }
 export type Metrics = { sunPercent: number; earthPercent: number; concurrentPercent: number; longestDark: number; longestBlackout: number }
 
 // Mouton, Malapert y Haworth usan el centro oficial del IAU Gazetteer; de Gerlache Rim 2 es aproximado.
@@ -16,21 +17,8 @@ export const SITES: Site[] = [
 ]
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
-const phase = (date: string) => (Date.parse(date + 'T00:00:00Z') / 3600000) || 0
-
-export function makeDemoScenario(site: Site, start: string, hours = 168): Scenario {
-  const index = SITES.findIndex(item => item.id === site.id)
-  const offset = phase(start) / 24 * 0.24 + index * 0.85 + site.lon * 0.008
-  const samples = Array.from({ length: hours + 1 }, (_, hour) => {
-    const t = hour / 24
-    const az = t * 0.38 + offset
-    const sunElevation = 2.8 + 4.7 * Math.sin(az) + 1.15 * Math.sin(t * 1.8 + index)
-    const earthElevation = 5.1 + 3.7 * Math.sin(t * 0.44 + index * 1.2 + offset * 0.3)
-    const horizonSun = 1.5 + 3.3 * Math.max(0, Math.sin(t * 1.13 + index * 1.6))
-    const horizonEarth = 1.1 + 4.2 * Math.max(0, Math.cos(t * 0.81 + index * 0.7))
-    return { hour, sunElevation, earthElevation, horizonSun, horizonEarth, sunVisible: sunElevation > horizonSun, earthVisible: earthElevation > horizonEarth }
-  })
-  return { site, start, hours, samples, source: 'demo' }
+export function emptyScenario(site: Site, start: string): Scenario {
+  return { site, start, hours: 168, samples: [], source: 'unavailable' }
 }
 
 function longestRun(samples: Sample[], key: 'sunVisible' | 'earthVisible') {

@@ -17,6 +17,7 @@ from .catalog import CatalogSite, find_site, list_sites
 from .copilot import CopilotRequest, CopilotResponse, diagnose_scenario, parse_natural_constraints
 from .delta import MissionDeltaRequest, MissionDeltaResult, compute_mission_delta, shift_lunar_coordinates
 from .horizons import HorizonsClient, HorizonsError
+from .mesh import MeshRequest, MeshResult, terrain_mesh
 from .models import (
     CompareRequest,
     Constraints,
@@ -35,6 +36,7 @@ from .models import (
 )
 from .power import PowerSimulationRequest, PowerSimulationResult, simulate_power
 from .ranking import RankRequest, RankingResponse, rank_scenarios
+from .slope import SlopeRequest, SlopeResult, regional_slope
 from .terrain import LolaDem, TerrainError, horizon_profile
 from .transitions import effective_step_minutes
 
@@ -49,6 +51,8 @@ async def lifespan(app: FastAPI):
     if not configured_dem.is_absolute():
         configured_dem = BACKEND_DIR / configured_dem
     app.state.dem = LolaDem(configured_dem) if configured_dem.exists() else None
+    fine_path = BACKEND_DIR / "data" / "ldem_875s_20m.img"
+    app.state.fine_dem = LolaDem(fine_path) if configured_dem == default_dem and fine_path.exists() else None
 
     # Persistent ephemeris cache
     default_cache = BACKEND_DIR / "data" / "horizons_cache.sqlite"
@@ -61,6 +65,8 @@ async def lifespan(app: FastAPI):
         yield
     if app.state.dem is not None:
         app.state.dem.close()
+    if app.state.fine_dem is not None:
+        app.state.fine_dem.close()
 
 
 app = FastAPI(
@@ -112,6 +118,20 @@ def get_catalog_site(site_id: str) -> CatalogSite:
 # ---------------------------------------------------------------------------
 # Terrain Horizon endpoint (LOLA DEM)
 # ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/terrain/mesh", response_model=MeshResult, tags=["Terrain"])
+def get_terrain_mesh(payload: MeshRequest, request: Request) -> MeshResult:
+    dem = request.app.state.fine_dem if payload.site.latitude_deg <= -87.55 else None
+    try:
+        if dem is not None:
+            try:
+                return terrain_mesh(dem, payload.site)
+            except TerrainError:
+                pass
+        return terrain_mesh(require_dem(request), payload.site)
+    except TerrainError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def require_dem(request: Request) -> LolaDem:
@@ -166,6 +186,34 @@ def get_site_horizon(
     except TerrainError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return TerrainResult(site=site_model, profile=profile, site_height_km_used=height)
+
+
+@app.post("/api/v1/terrain/slope", response_model=SlopeResult, tags=["Terrain"])
+def terrain_slope(payload: SlopeRequest, request: Request) -> SlopeResult:
+    dem = require_dem(request)
+    try:
+        return regional_slope(dem, payload.site, baseline_pixels=payload.baseline_pixels,
+                              neighborhood_radius_m=payload.neighborhood_radius_m,
+                              threshold_deg=payload.threshold_deg)
+    except (TerrainError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/sites/{site_id}/slope", response_model=SlopeResult, tags=["Terrain"])
+def get_site_slope(
+    site_id: str,
+    request: Request,
+    baseline_pixels: int = Query(default=1),
+    neighborhood_radius_m: float = Query(default=1000, ge=0, le=5000),
+    threshold_deg: float | None = Query(default=None, gt=0, lt=90),
+) -> SlopeResult:
+    site = find_site(site_id)
+    if site is None:
+        raise HTTPException(status_code=404, detail=f"Site '{site_id}' not found in lunar catalog")
+    site_model = Site(latitude_deg=site.latitude_deg, longitude_deg=site.longitude_deg, label=site.name)
+    return terrain_slope(SlopeRequest(site=site_model, baseline_pixels=baseline_pixels,
+                                      neighborhood_radius_m=neighborhood_radius_m,
+                                      threshold_deg=threshold_deg), request)
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +442,14 @@ async def export_scenario_csv(scenario: Scenario, request: Request) -> Response:
         "earth_visible",
         "earth_disk_fraction",
         "earth_disk_state",
+        "site_latitude_deg",
+        "site_longitude_deg",
+        "ephemeris_source",
+        "horizon_source",
+        "dem_pixel_scale_m",
+        "sampling_minutes",
+        "transition_bracket_minutes",
+        "precision_note",
     ])
     for s in result.samples:
         hour_offset = round((s.time_utc - scenario.start_utc).total_seconds() / 3600.0, 2)
@@ -412,6 +468,14 @@ async def export_scenario_csv(scenario: Scenario, request: Request) -> Response:
             s.earth.visible,
             s.earth.disk_fraction,
             s.earth.disk_state,
+            scenario.site.latitude_deg,
+            scenario.site.longitude_deg,
+            result.ephemeris_source,
+            result.horizon_source,
+            240 if scenario.use_dem_horizon else "",
+            result.timeline.transition_resolution_minutes,
+            result.timeline.refined_transition_resolution_minutes or result.timeline.transition_resolution_minutes,
+            result.precision_note,
         ])
     filename = f"lunar_scenario_{(scenario.site.label or 'site').replace(' ', '_')}.csv"
     return Response(
@@ -475,6 +539,11 @@ async def analyze_legacy(payload: LegacyAnalyzeRequest, request: Request) -> Leg
             "longestDark": result.metrics.longest_darkness_hours,
             "longestBlackout": result.metrics.longest_earth_blackout_hours,
         },
+        ephemeris_source=result.ephemeris_source,
+        dem_pixel_scale_m=240 if payload.use_dem_horizon else None,
+        sampling_minutes=payload.step_minutes,
+        transition_uncertainty_minutes=result.timeline.transition_resolution_minutes,
+        precision_note=result.precision_note,
     )
 
 
