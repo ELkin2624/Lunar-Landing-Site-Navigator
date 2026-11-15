@@ -297,11 +297,13 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
     if (view !== 'globe' || !cameraRef.current || !controlsRef.current) return
     const camera = cameraRef.current
     const controls = controlsRef.current
-    const target = focus === 'moon' ? bodyVector(site.lat, site.lon).multiplyScalar(0.9)
+    // The Moon view looks down the site normal so the whole globe stays framed with the marker centred.
+    const target = focus === 'moon' ? new THREE.Vector3(0, 0, 0)
       : focus === 'sun' ? sunRef.current?.position.clone() : earthRef.current?.position.clone()
     if (!target) return
-    const distance = focus === 'moon' ? 2.1 : 1.35
-    const destination = target.clone().add(new THREE.Vector3(distance * 0.7, distance * 0.45, distance))
+    const distance = 1.35
+    const destination = focus === 'moon' ? bodyVector(site.lat, site.lon).normalize().multiplyScalar(3.4)
+      : target.clone().add(new THREE.Vector3(distance * 0.7, distance * 0.45, distance))
     const fromCamera = camera.position.clone()
     const fromTarget = controls.target.clone()
     let frame = 0
@@ -320,7 +322,7 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   }, [focus, view, site, sample, mesh])
 
   return <section id="mission-3d" className="panel terrain-3d-panel">
-    <div className="panel-heading"><div><span className="section-kicker">07 / EXPLORACIÓN ESPACIAL</span><h2>Relieve 3D y cuerpos celestes</h2></div><div className="terrain-view-toggle" role="group" aria-label="Vista tridimensional"><button className={view === 'local' ? 'active' : ''} onClick={() => setView('local')}>Terreno LOLA</button><button className={view === 'globe' ? 'active' : ''} onClick={() => setView('globe')}>Luna, Sol y Tierra</button></div></div>
+    <div className="panel-heading"><div><span className="section-kicker">09 / EXPLORACIÓN ESPACIAL</span><h2>Relieve 3D y cuerpos celestes</h2></div><div className="terrain-view-toggle" role="group" aria-label="Vista tridimensional"><button className={view === 'local' ? 'active' : ''} onClick={() => setView('local')}>Terreno LOLA</button><button className={view === 'globe' ? 'active' : ''} onClick={() => setView('globe')}>Luna, Sol y Tierra</button></div></div>
     <div className="terrain-3d-status"><span>Resultado calculado: Sol {sample.sunVisible ? 'visible' : 'oculto'}</span><span>Tierra {sample.earthVisible ? 'visible' : 'oculta'}</span><span>La imagen 3D ilustra la geometría; no calcula estas ventanas.</span></div>
     <div className="terrain-quality"><span>Calidad 3D</span><div role="group" aria-label="Calidad del visor 3D"><button className={quality === 'auto' ? 'active' : ''} onClick={() => setQuality('auto')}>Automática</button><button className={quality === 'high' ? 'active' : ''} onClick={() => setQuality('high')}>Alta</button><button className={quality === 'save' ? 'active' : ''} onClick={() => setQuality('save')}>Ahorro</button></div><small>{measuredFps == null ? 'Mueve el visor para medir FPS' : `${measuredFps} FPS${adaptiveLow.current ? ' · resolución reducida' : ''}`}{perfTelemetry ? ` · ${perfTelemetry.assetTier} (${perfTelemetry.loadMs} ms · ${perfTelemetry.tris.toLocaleString()} tris${perfTelemetry.heapMb != null ? ` · ${perfTelemetry.heapMb} MB Heap` : ''})` : ''}</small><button type="button" onClick={downloadTelemetry} disabled={measuredFps == null} title="Guarda los datos de rendimiento de este dispositivo sin enviarlos a un servidor">Descargar diagnóstico 3D</button></div>
     {view === 'globe' && <><div className="body-explorer" role="group" aria-label="Explorar cuerpos celestes">

@@ -562,6 +562,9 @@
     }
 
     animate();
+    // Embeds can open on a body (?focus=moon); the frame after the first render has world positions.
+    const initialFocus = new URLSearchParams(location.search).get('focus');
+    if (['sun', 'earth', 'moon', 'earth-moon'].includes(initialFocus)) requestAnimationFrame(() => focusBody(initialFocus));
   </script>
 </body>
 </html>

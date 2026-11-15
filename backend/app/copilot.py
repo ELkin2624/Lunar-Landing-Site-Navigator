@@ -91,7 +91,7 @@ def diagnose_scenario(result: ScenarioResult, user_query: str | None = None) -> 
     if earth_pct >= 80.0:
         comm_diag = (
             f"Línea de visión a la Tierra continua y robusta ({earth_pct}% del período analizado), "
-            f"con un apagón máximo de tan solo {m.longest_earth_blackout_hours}h. Soporta comunicación directa DSN sin satélites de retransmisión."
+            f"con un apagón máximo de tan solo {m.longest_earth_blackout_hours}h. La geometría permite comunicación directa sin satélites de retransmisión; el enlace real depende de la estación terrestre y del equipo de radio."
         )
     elif earth_pct >= 50.0:
         comm_diag = (

@@ -87,9 +87,9 @@ def rank_scenarios(results: list[ScenarioResult], weights: RankingWeights) -> Ra
             tradeoffs.append(f"Baja iluminación acumulada ({round(m.sunlit_fraction * 100, 1)}%)")
 
         if m.earth_visible_fraction >= 0.70:
-            highlights.append(f"Excelente cobertura de comunicaciones DSN ({round(m.earth_visible_fraction * 100, 1)}%)")
+            highlights.append(f"Tierra visible gran parte del periodo ({round(m.earth_visible_fraction * 100, 1)}%)")
         elif m.earth_visible_fraction < 0.40:
-            tradeoffs.append(f"Ventanas de comunicación restringidas ({round(m.earth_visible_fraction * 100, 1)}%)")
+            tradeoffs.append(f"Tierra visible poco tiempo ({round(m.earth_visible_fraction * 100, 1)}%)")
 
         if m.longest_darkness_hours <= 12.0:
             highlights.append(f"Noche máxima muy corta ({m.longest_darkness_hours}h)")
@@ -97,7 +97,7 @@ def rank_scenarios(results: list[ScenarioResult], weights: RankingWeights) -> Ra
             tradeoffs.append(f"Noche prolongada ({m.longest_darkness_hours}h) que exige alta capacidad de batería")
 
         if m.longest_earth_blackout_hours <= 6.0:
-            highlights.append(f"Apagón de radio mínimo ({m.longest_earth_blackout_hours}h)")
+            highlights.append(f"Tierra oculta como máximo {m.longest_earth_blackout_hours}h seguidas")
         elif m.longest_earth_blackout_hours > 24.0:
             tradeoffs.append(f"Apagón de enlace prolongado ({m.longest_earth_blackout_hours}h)")
 
