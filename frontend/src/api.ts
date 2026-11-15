@@ -128,6 +128,36 @@ export type SlopeResult = {
 
 export const apiEnabled = useApi
 
+export type IlluminationLevel = 'favorable' | 'partial' | 'minimal' | 'none'
+export type IlluminationDay = {
+  date: string; sunlitPercent: number; level: IlluminationLevel
+  maxSunElevationDeg: number; maxClearanceDeg: number
+  bestTimeUtc: string; sunAzimuthDeg: number; sunElevationDeg: number
+}
+export type IlluminationCalendar = { horizonSource: string; thresholds: { favorable: number; partial: number }; days: IlluminationDay[] }
+
+export async function fetchIlluminationCalendar(site: Site, year: number, month: number, signal?: AbortSignal): Promise<IlluminationCalendar> {
+  if (!useApi) throw new Error('El calendario requiere el backend (VITE_USE_API=true)')
+  const response = await fetch(`${base}/api/v1/illumination/calendar`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
+    body: JSON.stringify({ latitude: site.lat, longitude: site.lon, year, month }),
+  })
+  if (!response.ok) {
+    const detail = await response.json().then((body: { detail?: unknown }) => body.detail, () => null)
+    throw new Error(typeof detail === 'string' ? detail : `HTTP ${response.status}`)
+  }
+  const d = await response.json() as { horizon_source: string; thresholds: { favorable: number; partial: number }; days: Record<string, any>[] }
+  return {
+    horizonSource: d.horizon_source,
+    thresholds: d.thresholds,
+    days: d.days.map(day => ({
+      date: day.date, sunlitPercent: day.sunlit_percent, level: day.level,
+      maxSunElevationDeg: day.max_sun_elevation_deg, maxClearanceDeg: day.max_clearance_deg,
+      bestTimeUtc: day.best_time_utc, sunAzimuthDeg: day.sun_azimuth_deg, sunElevationDeg: day.sun_elevation_deg,
+    })),
+  }
+}
+
 export type TerrainMesh = {
   gridSize: number; gridSpacingM: number; groundSpacingM: number; spanM: number
   centerXM: number; centerYM: number

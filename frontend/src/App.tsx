@@ -1,9 +1,15 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BatteryCharging, Check, ChevronRight, CircleHelp, Clock3, Compass, Download, Earth, Gauge, GitCompareArrows, Layers3, MapPin, Menu, Moon, Play, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Sun, Wifi, X, Zap } from 'lucide-react'
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BatteryCharging, CalendarDays, Check, ChevronRight, CircleHelp, Clock3, Compass, Download, Earth, Gauge, GitCompareArrows, Layers3, MapPin, Menu, Moon, Play, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Sun, Wifi, X, Zap } from 'lucide-react'
 import { analyze, apiEnabled, askCopilot, exportScenarioCsv, fetchMissionDelta, fetchRankedSites, fetchSlope, parseNaturalConstraints, simulateCommsApi, type CopilotAskResult, type MissionDeltaResponse, type RankingResult, type SlopeResult } from './api'
 import { COMMS_PRESETS, SITES, chartPath, computeCommsProfile, computePowerProfile, emptyScenario, formatHour, metrics, verdict, type CommsConfig, type PowerConfig, type Scenario, type Site } from './data'
 import { coordinatesFromPolarMeters, isWithinPolarMap, polarMapCoordinates, polarMapPosition, polarMeters } from './polar'
 import { LocalTileMap } from './LocalTileMap'
+import { EducationView } from './education/EducationView'
+import { MissionPlanningView } from './mission-planning/MissionPlanningView'
+import { type ComparisonResults } from './mission-planning/comparison'
+import { MissionResultsView } from './mission-results/MissionResultsView'
+import { MissionDetailView } from './mission-detail/MissionDetailView'
+import { IlluminationCalendarView } from './illumination-calendar/IlluminationCalendarView'
 const Terrain3D = lazy(() => import('./Terrain3D').then(module => ({ default: module.Terrain3D })))
 const OrbitalLoading = lazy(() => import('./OrbitalLoading').then(module => ({ default: module.OrbitalLoading })))
 
@@ -754,6 +760,18 @@ export default function App() {
   const [csvExporting, setCsvExporting] = useState(false)
   const [mode, setMode] = useState<'explorer' | 'analyst'>('explorer')
   const [tab, setTab] = useState<'overview' | 'compare'>('overview')
+  const [started, setStarted] = useState(false)
+  const pageTitle = useRef<HTMLHeadingElement>(null)
+
+  useEffect(() => {
+    if (started) pageTitle.current?.focus({ preventScroll: true })
+  }, [started])
+  const [planningOpen, setPlanningOpen] = useState(false)
+  const [resultsOpen, setResultsOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [detailScenario, setDetailScenario] = useState<Scenario | null>(null)
+  const [missionResults, setMissionResults] = useState<ComparisonResults | null>(null)
   const [compareId, setCompareId] = useState(SITES[1].id)
   const [compareDateB, setCompareDateB] = useState(initialDate)
   const [compareCEnabled, setCompareCEnabled] = useState(false)
@@ -779,15 +797,15 @@ export default function App() {
 
   // Theme state (dark/light)
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    try { return localStorage.getItem('lunarpath-theme') === 'light' ? 'light' : 'dark' } catch { return 'dark' }
+    try { return localStorage.getItem('lunarpath-theme') === 'dark' ? 'dark' : 'light' } catch { return 'light' }
   })
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
     try { localStorage.setItem('lunarpath-theme', theme) } catch {}
     const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', theme === 'light' ? '#eef2f7' : '#080d17')
-  }, [theme])
+    if (meta) meta.setAttribute('content', !started || theme === 'light' ? '#f3f6fc' : '#080d17')
+  }, [theme, started])
 
   // Ranking state in Compare tab
   const [rankWeights, setRankWeights] = useState({ sun: 0.40, earth: 0.30, concurrent: 0.15, darknessPenalty: 0.10, blackoutPenalty: 0.05 })
@@ -801,6 +819,9 @@ export default function App() {
       setSite(candidate)
     }
     setTab('overview')
+    setPlanningOpen(false)
+    setResultsOpen(false)
+    setDetailOpen(false)
     setSidebarOpen(false)
   }
   const selectDate = (nextDate: string) => {
@@ -819,6 +840,7 @@ export default function App() {
     else if (nextHours === 168 && stepMinutes === 15) setStepMinutes(30)
   }
   useEffect(() => {
+    if (!started) return
     const controller = new AbortController()
     setLoading(true)
     setApiError(null)
@@ -837,8 +859,9 @@ export default function App() {
       setLoading(false)
     })
     return () => controller.abort()
-  }, [site, date, durationHours, stepMinutes, refineTransitions, retry])
+  }, [started, site, date, durationHours, stepMinutes, refineTransitions, retry])
   useEffect(() => {
+    if (!started) return
     if (!apiEnabled) { setSlope(null); setSlopeError(null); return }
     const controller = new AbortController()
     setSlopeError(null)
@@ -848,7 +871,7 @@ export default function App() {
       setSlopeError(`Pendiente no disponible: ${String(err)}`)
     })
     return () => controller.abort()
-  }, [site, slopeBaseline, slopeThreshold])
+  }, [started, site, slopeBaseline, slopeThreshold])
   useEffect(() => {
     if (compareId === site.id && compareDateB === date) {
       setCompareId(SITES.find(s => s.id !== site.id)!.id)
@@ -859,7 +882,7 @@ export default function App() {
   const [comparedState, setCompared] = useState<Scenario>(() => emptyScenario(SITES[1], initialDate))
   const [comparedCState, setComparedC] = useState<Scenario>(() => emptyScenario(SITES[2], initialDate))
   useEffect(() => {
-    if (tab !== 'compare') return
+    if (!started || tab !== 'compare') return
     const controller = new AbortController()
     const comparisonSite = SITES.find(s => s.id === compareId) || (compareId === customSite?.id && customSite) || SITES[1]
     setCompareError(null)
@@ -873,9 +896,9 @@ export default function App() {
       setCompareError(`No se pudo analizar ${comparisonSite.name}: ${String(error)}`)
     })
     return () => controller.abort()
-  }, [compareId, compareDateB, customSite, tab, durationHours, stepMinutes, refineTransitions, retry])
+  }, [started, compareId, compareDateB, customSite, tab, durationHours, stepMinutes, refineTransitions, retry])
   useEffect(() => {
-    if (tab !== 'compare' || !compareCEnabled) return
+    if (!started || tab !== 'compare' || !compareCEnabled) return
     const controller = new AbortController()
     const siteC = SITES.find(s => s.id === compareIdC) || SITES[2]
     analyze(siteC, compareDateC, controller.signal, {
@@ -888,9 +911,9 @@ export default function App() {
       setCompareError(`No se pudo analizar ${siteC.name}: ${String(error)}`)
     })
     return () => controller.abort()
-  }, [compareCEnabled, compareIdC, compareDateC, tab, durationHours, stepMinutes, refineTransitions, retry])
+  }, [started, compareCEnabled, compareIdC, compareDateC, tab, durationHours, stepMinutes, refineTransitions, retry])
   useEffect(() => {
-    if (!apiEnabled || tab !== 'compare') { setComparedSlope(null); setComparedSlopeC(null); return }
+    if (!started || !apiEnabled || tab !== 'compare') { setComparedSlope(null); setComparedSlopeC(null); return }
     const controller = new AbortController()
     const comparisonSite = SITES.find(s => s.id === compareId) || (compareId === customSite?.id && customSite) || SITES[1]
     fetchSlope(comparisonSite, slopeBaseline, 1000, slopeThreshold, controller.signal).then(setComparedSlope).catch(() => {
@@ -905,10 +928,10 @@ export default function App() {
       setComparedSlopeC(null)
     }
     return () => controller.abort()
-  }, [compareId, compareCEnabled, compareIdC, customSite, slopeBaseline, slopeThreshold, tab])
+  }, [started, compareId, compareCEnabled, compareIdC, customSite, slopeBaseline, slopeThreshold, tab])
 
   useEffect(() => {
-    if (!apiEnabled || tab !== 'compare') return
+    if (!started || !apiEnabled || tab !== 'compare') return
     const controller = new AbortController()
     const timer = setTimeout(() => {
       setRankingLoading(true)
@@ -924,7 +947,7 @@ export default function App() {
       })
     }, 250)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [tab, date, rankWeights, minSun, minEarth, maxBlackout])
+  }, [started, tab, date, rankWeights, minSun, minEarth, maxBlackout])
 
   const compared = comparedState
   const comparedC = comparedCState
@@ -986,12 +1009,41 @@ export default function App() {
     return Math.max(rangeA[0], rangeB[0]) <= Math.min(rangeA[1], rangeB[1])
   }
 
+  const showHome = () => {
+    setStarted(false)
+    setSidebarOpen(false)
+    window.scrollTo(0, 0)
+  }
+
+  const startExploring = () => {
+    setTab('overview')
+    setCalendarOpen(false)
+    setPlanningOpen(false)
+    setResultsOpen(false)
+    setDetailOpen(false)
+    setStarted(true)
+    window.scrollTo(0, 0)
+  }
+
+  if (!started) return <div className="home-shell">
+    <header className="home-header">
+      <div className="brand-symbol" aria-hidden="true"><Moon size={20}/><span/></div>
+      <strong>LUNARPATH <span>AI</span></strong>
+    </header>
+    <main className="home-content"><EducationView onExplore={startExploring}/></main>
+  </div>
+
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-symbol"><Moon size={22}/><span/></div><div><strong>LUNARPATH<span> AI</span></strong><small>MISSION PLANNING PLATFORM</small></div><button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Cerrar menú"><X size={20}/></button></div>
       <div className="sidebar-section-title">NAVEGACIÓN</div>
-      <button className={`nav-item ${tab === 'overview' ? 'selected' : ''}`} onClick={() => { setTab('overview'); setSidebarOpen(false) }}><Compass size={18}/> Consola de Misión <ChevronRight size={15}/></button>
-      <button className={`nav-item ${tab === 'compare' ? 'selected' : ''}`} onClick={() => { setTab('compare'); setSidebarOpen(false) }}><Layers3 size={18}/> Comparar y Ranking <ChevronRight size={15}/></button>
+      <button type="button" className="nav-item" onClick={showHome}><Moon size={18}/> Inicio <ChevronRight size={15}/></button>
+      <button className={`nav-item ${!calendarOpen && !planningOpen && !resultsOpen && !detailOpen && tab === 'overview' ? 'selected' : ''}`} onClick={() => { setTab('overview'); setCalendarOpen(false); setPlanningOpen(false); setResultsOpen(false); setDetailOpen(false); setSidebarOpen(false) }}><Compass size={18}/> Explorador lunar <ChevronRight size={15}/></button>
+      <button className={`nav-item ${!calendarOpen && !planningOpen && !resultsOpen && !detailOpen && tab === 'compare' ? 'selected' : ''}`} onClick={() => { setTab('compare'); setCalendarOpen(false); setPlanningOpen(false); setResultsOpen(false); setDetailOpen(false); setSidebarOpen(false) }}><Layers3 size={18}/> Comparar y Ranking <ChevronRight size={15}/></button>
+      <button className={`nav-item ${calendarOpen ? 'selected' : ''}`} onClick={() => { setCalendarOpen(true); setPlanningOpen(false); setResultsOpen(false); setDetailOpen(false); setSidebarOpen(false) }}><CalendarDays size={18}/> Calendario de iluminación <ChevronRight size={15}/></button>
+      <button className={`nav-item ${!calendarOpen && planningOpen ? 'selected' : ''}`} onClick={() => { setCalendarOpen(false); setPlanningOpen(true); setResultsOpen(false); setDetailOpen(false); setSidebarOpen(false) }}><MapPin size={18}/> Planificación guiada <ChevronRight size={15}/></button>
+      <button className={`nav-item ${!calendarOpen && resultsOpen ? 'selected' : ''}`} onClick={() => { setCalendarOpen(false); setResultsOpen(true); setPlanningOpen(false); setDetailOpen(false); setSidebarOpen(false) }}><Activity size={18}/> Resultados de misión <ChevronRight size={15}/></button>
+      <button className={`nav-item ${!calendarOpen && detailOpen ? 'selected' : ''}`} onClick={() => { setCalendarOpen(false); setDetailOpen(true); setResultsOpen(false); setPlanningOpen(false); setSidebarOpen(false) }}><Search size={18}/> Detalle de misión <ChevronRight size={15}/></button>
       <div className="sidebar-section-title sites-title">CATÁLOGO POLAR SUR <span>0{SITES.length}</span></div>
       <div className="site-search"><Search size={15}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar sitio o región..." aria-label="Buscar sitios"/></div>
       <div className="site-list">{customSite && <button className={`site-item ${site.id === 'custom' ? 'active' : ''}`} onClick={() => selectSite(customSite)}><span className="site-number"><MapPin size={14}/></span><span><strong>Punto personalizado</strong><small>{Math.abs(customSite.lat).toFixed(3)}° S · {customSite.lon.toFixed(3)}° E</small></span>{site.id === 'custom' && <span className="active-indicator"/>}</button>}{filteredSites.map(item => <button key={item.id} className={`site-item ${item.id === site.id ? 'active' : ''}`} onClick={() => selectSite(item)}><span className="site-number">0{SITES.indexOf(item) + 1}</span><span><strong>{item.name}</strong><small>{item.region} {item.lat <= -87.5 ? '· DEM 20m' : ''}</small></span>{item.id === site.id && <span className="active-indicator"/>}</button>)}{filteredSites.length === 0 && <p className="empty-search">Sin resultados</p>}</div>
@@ -1000,7 +1052,7 @@ export default function App() {
     <div className="main-shell">
       <header className="topbar">
         <button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menú"><Menu size={21}/></button>
-        <div className="breadcrumbs">LUNARPATH <ChevronRight size={13}/> <strong>{tab === 'overview' ? site.name : 'Comparación y Ranking'}</strong></div>
+        <div className="breadcrumbs">LUNARPATH <ChevronRight size={13}/> <strong>{calendarOpen ? 'Calendario de iluminación' : detailOpen ? 'Detalle de misión' : resultsOpen ? 'Resultados de misión' : planningOpen ? 'Planificación guiada' : tab === 'overview' ? site.name : 'Comparación y Ranking'}</strong></div>
         <div className="top-actions">
           {ready && scenario.provenance && <span className="provenance-pill" title="Fuentes topográficas activas en el horizonte">{scenario.provenance.terrainSources.includes('LDEM_875S_20M') ? 'LOLA 20m (≤5km) + 240m' : 'LOLA 240m'} · JPL Horizons</span>}
           <button
@@ -1017,10 +1069,11 @@ export default function App() {
         </div>
       </header>
       <main className="content">
+        {calendarOpen ? <IlluminationCalendarView site={site}/> : detailOpen ? <MissionDetailView key={detailScenario ? `${detailScenario.site.id}-${detailScenario.start}` : 'empty'} scenario={detailScenario} onCompare={() => { setDetailOpen(false); setResultsOpen(true) }} onPlan={() => { setDetailOpen(false); setPlanningOpen(true) }}/> : resultsOpen ? <MissionResultsView result={missionResults} onEdit={() => { setResultsOpen(false); setPlanningOpen(true) }} onDetail={id => { const chosen = missionResults?.scenarios.find(candidate => candidate.site.id === id); if (chosen) { setDetailScenario(chosen); setResultsOpen(false); setDetailOpen(true) } }}/> : planningOpen ? <MissionPlanningView sites={SITES} initialDate={date} initialResult={missionResults} onCompared={result => { setMissionResults(result); setDetailScenario(null); setPlanningOpen(false); setResultsOpen(true) }}/> : <>
         <div className="page-heading">
           <div>
             <div className="eyebrow"><span/> LUNAR SOUTH POLE / MISSION PLANNING CONSOLE</div>
-            <h1>{tab === 'overview' ? 'Explorador e Ingeniería Lunar' : 'Comparación con Incertidumbre y Ranking'}<span className="heading-star">✦</span></h1>
+            <h1 ref={pageTitle} tabIndex={-1}>{tab === 'overview' ? 'Explorador e Ingeniería Lunar' : 'Comparación con Incertidumbre y Ranking'}</h1>
             <p>{tab === 'overview' ? 'Topografía LOLA georreferenciada, efemérides JPL Horizons, simulación energética de batería y sensibilidad al aterrizaje.' : 'Contrasta candidatos considerando el margen de sensibilidad topográfica (±240 m) y pondera prioridades de misión.'}</p>
           </div>
           <div className="heading-actions">
@@ -1275,6 +1328,7 @@ export default function App() {
             </div> : null}
           </section>
         </div>}
+        </>}
         <footer><span>© 2026 LUNARPATH AI · NASA SPACE APPS CHALLENGE</span><span>{ready ? `EFEMÉRIDES JPL HORIZONS / RELIEVE ${scenario.provenance?.terrainSources.join(' + ') || 'LOLA'} / IAU2000::30120` : 'SIN RESULTADOS CIENTÍFICOS / UTC'}</span></footer>
       </main>
     </div>

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistema Solar — Sol, Tierra y Luna</title>
+  <style>
+    html {
+      color-scheme: dark;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #010308;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100%;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+    button {
+      font: inherit;
+    }
+    #bottom-bar {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(6, 10, 18, 0.72);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      padding: 4px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+      max-width: calc(100vw - 24px);
+      flex-wrap: wrap;
+      justify-content: center;
+      width: max-content;
+    }
+    .bar-btn {
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 7px 9px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+      white-space: nowrap;
+    }
+    .bar-btn:hover {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .bar-btn.active {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.16);
+    }
+    .bar-divider {
+      width: 1px;
+      height: 16px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(1, 3, 8, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.4s ease;
+    }
+    .spinner {
+      width: 42px;
+      height: 42px;
+      border: 3px solid rgba(251, 191, 36, 0.2);
+      border-top-color: #fbbf24;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-overlay" role="status" aria-label="Cargando modelos 3D">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="canvas-container" tabindex="0" aria-label="Escena del Sol, la Tierra y la Luna"></div>
+
+  <div id="bottom-bar">
+    <button class="bar-btn active" data-focus="sun" aria-pressed="true" type="button">Vista general</button>
+    <button class="bar-btn" data-focus="earth" aria-pressed="false" type="button">Tierra</button>
+    <button class="bar-btn" data-focus="moon" aria-pressed="false" type="button">Luna</button>
+    <button class="bar-btn" data-focus="earth-moon" aria-pressed="false" type="button">Tierra + Luna</button>
+    <span class="bar-divider" aria-hidden="true"></span>
+    <button class="bar-btn" id="toggle-pause" type="button">Detener</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const R_EARTH_KM = 6378.137;
+    const R_SUN_UNITS = 16.0;
+    const R_EARTH_UNITS = 2.4;
+    const R_MOON_UNITS = R_EARTH_UNITS * (1737.4 / R_EARTH_KM);
+
+    const sunEarthDistUnits = 64.0;
+    const earthMoonDistUnits = 9.5;
+
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.2, 6000);
+    camera.position.set(0, 56, 132);
+
+    function showLoadError() {
+      const overlay = document.getElementById('loading-overlay');
+      if (!overlay) return;
+      overlay.setAttribute('aria-label', 'Visor 3D no disponible');
+      overlay.textContent = 'No se pudo cargar el sistema 3D.';
+    }
+
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        logarithmicDepthBuffer: false,
+        powerPreference: 'high-performance'
+      });
+    } catch (error) {
+      showLoadError();
+      throw error;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+    container.appendChild(renderer.domElement);
+    container.addEventListener('pointerdown', () => container.focus({ preventScroll: true }));
+
+    function fitCamera() {
+      camera.aspect = container.clientWidth / Math.max(1, container.clientHeight);
+      const widthFit = Math.min(1, camera.aspect / 1.5);
+      camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(21)) / widthFit));
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+    fitCamera();
+    new ResizeObserver(fitCamera).observe(container);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.enablePan = true;
+    controls.screenSpacePanning = true;
+    controls.panSpeed = 1.4;
+    controls.minDistance = 1.5;
+    controls.maxDistance = 800;
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    // Controles de movimiento libre 3D (WASD, Flechas, Q/E, Espacio/Ctrl)
+    const keysPressed = new Set();
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement !== container) return;
+      keysPressed.add(e.code);
+      if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+    });
+    window.addEventListener('keyup', (e) => {
+      keysPressed.delete(e.code);
+    });
+    window.addEventListener('blur', () => keysPressed.clear());
+    container.addEventListener('blur', () => keysPressed.clear());
+
+    // Fondo estelar
+    const starCount = 3500;
+    const starPos = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      const r = 1800 + Math.random() * 1400;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPos[i * 3 + 1] = r * Math.cos(phi);
+      starPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xe2e8f0, size: 3.2, sizeAttenuation: true })));
+
+    // Jerarquía orbital
+    const sunGroup = new THREE.Group();
+    sunGroup.rotation.z = THREE.MathUtils.degToRad(7.25);
+    scene.add(sunGroup);
+
+    const earthOrbitPivot = new THREE.Group();
+    scene.add(earthOrbitPivot);
+
+    const earthSystemGroup = new THREE.Group();
+    earthSystemGroup.position.set(sunEarthDistUnits, 0, 0);
+    earthOrbitPivot.add(earthSystemGroup);
+
+    const earthSpinGroup = new THREE.Group();
+    earthSpinGroup.rotation.z = THREE.MathUtils.degToRad(23.4393);
+    earthSystemGroup.add(earthSpinGroup);
+
+    const moonOrbitPivot = new THREE.Group();
+    moonOrbitPivot.rotation.z = THREE.MathUtils.degToRad(5.145);
+    earthSystemGroup.add(moonOrbitPivot);
+
+    const moonGroup = new THREE.Group();
+    moonGroup.position.set(earthMoonDistUnits, 0, 0);
+    moonOrbitPivot.add(moonGroup);
+
+    // Luz solar
+    const sunLight = new THREE.DirectionalLight(0xfffcf2, 3.6);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.near = 1;
+    sunLight.shadow.camera.far = 200;
+    sunLight.shadow.camera.left = -25;
+    sunLight.shadow.camera.right = 25;
+    sunLight.shadow.camera.top = 25;
+    sunLight.shadow.camera.bottom = -25;
+    scene.add(sunLight);
+    scene.add(sunLight.target);
+    scene.add(new THREE.AmbientLight(0x0b1528, 0.08));
+
+    const sunDirUniform = { value: new THREE.Vector3(-1, 0, 0) };
+
+    // Corona solar
+    const coronaMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(R_SUN_UNITS * 1.18, 64, 48),
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide,
+        vertexShader: `
+          varying vec3 vNormalV;
+          varying vec3 vViewDir;
+          void main() {
+            vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+            vNormalV = normalize(normalMatrix * normal);
+            vViewDir = normalize(-mvPos.xyz);
+            gl_Position = projectionMatrix * mvPos;
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vNormalV;
+          varying vec3 vViewDir;
+          void main() {
+            float rim = pow(clamp(dot(-vNormalV, vViewDir), 0.0, 1.0), 3.4);
+            vec3 glow = mix(vec3(1.0, 0.38, 0.05), vec3(1.0, 0.85, 0.45), rim);
+            gl_FragColor = vec4(glow * rim * 1.45, rim * 0.85);
+          }
+        `
+      })
+    );
+    sunGroup.add(coronaMesh);
+
+    // Nubes y luces nocturnas de la Tierra
+    const texLoader = new THREE.TextureLoader();
+    const cloudsTex = texLoader.load(import.meta.env.BASE_URL + 'sistema-solar/textures/earth_clouds_2k.png');
+    cloudsTex.colorSpace = THREE.SRGBColorSpace;
+    const nightTex = texLoader.load(import.meta.env.BASE_URL + 'sistema-solar/textures/nasa_earth_lights_2k.png');
+    nightTex.colorSpace = THREE.SRGBColorSpace;
+    nightTex.flipY = false;
+
+    const cloudsMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(R_EARTH_UNITS * 1.008, 72, 48),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        alphaMap: cloudsTex,
+        transparent: true,
+        opacity: 0.86,
+        roughness: 0.9,
+        depthWrite: false
+      })
+    );
+    earthSpinGroup.add(cloudsMesh);
+
+    const atmoMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(R_EARTH_UNITS * 1.028, 72, 48),
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.FrontSide,
+        uniforms: { uSunDir: sunDirUniform },
+        vertexShader: `
+          varying vec3 vWorldNormal;
+          varying vec3 vViewDir;
+          void main() {
+            vec4 wp = modelMatrix * vec4(position, 1.0);
+            vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+            vViewDir = normalize(cameraPosition - wp.xyz);
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uSunDir;
+          varying vec3 vWorldNormal;
+          varying vec3 vViewDir;
+          void main() {
+            float ndotv = clamp(dot(normalize(vWorldNormal), normalize(vViewDir)), 0.0, 1.0);
+            float facing = 1.0 - ndotv;
+            float limb = smoothstep(0.52, 0.80, facing) * (1.0 - smoothstep(0.80, 0.995, facing));
+            float ndots = dot(normalize(vWorldNormal), normalize(uSunDir));
+            float sunFactor = smoothstep(-0.25, 0.45, ndots);
+            vec3 col = mix(vec3(0.05, 0.22, 0.65), vec3(0.24, 0.64, 1.0), sunFactor);
+            gl_FragColor = vec4(col * limb * (0.06 + 0.94 * sunFactor) * 1.45, limb * sunFactor * 0.9);
+          }
+        `
+      })
+    );
+    earthSpinGroup.add(atmoMesh);
+
+    // Carga de modelos GLB
+    const gltfLoader = new GLTFLoader();
+    let loadedCount = 0;
+    function markLoaded() {
+      loadedCount++;
+      if (loadedCount === 3) {
+        const overlay = document.getElementById('loading-overlay');
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 400);
+      }
+    }
+
+    gltfLoader.load(import.meta.env.BASE_URL + 'sol/sol_cientifico.glb', (gltf) => {
+      gltf.scene.scale.setScalar(R_SUN_UNITS);
+      gltf.scene.traverse((child) => {
+        if (child.isMesh) {
+          const tex = child.material.emissiveMap || child.material.map;
+          child.material = new THREE.ShaderMaterial({
+            uniforms: { uMap: { value: tex } },
+            vertexShader: `
+              varying vec2 vUv;
+              varying vec3 vNormalView;
+              varying vec3 vViewDir;
+              void main() {
+                vUv = uv;
+                vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+                vNormalView = normalize(normalMatrix * normal);
+                vViewDir = normalize(-mvPos.xyz);
+                gl_Position = projectionMatrix * mvPos;
+              }
+            `,
+            fragmentShader: `
+              uniform sampler2D uMap;
+              varying vec2 vUv;
+              varying vec3 vNormalView;
+              varying vec3 vViewDir;
+              void main() {
+                vec3 texCol = texture2D(uMap, vUv).rgb;
+                float mu = clamp(dot(normalize(vNormalView), normalize(vViewDir)), 0.0, 1.0);
+                vec3 limb = vec3(pow(mu, 0.38), pow(mu, 0.68), pow(mu, 1.15));
+                gl_FragColor = vec4(texCol * limb * 1.4, 1.0);
+              }
+            `
+          });
+        }
+      });
+      sunGroup.add(gltf.scene);
+      markLoaded();
+    }, undefined, showLoadError);
+
+    gltfLoader.load(import.meta.env.BASE_URL + 'tierra/tierra_cientifica.glb', (gltf) => {
+      gltf.scene.scale.setScalar(R_EARTH_UNITS);
+      gltf.scene.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          child.material.onBeforeCompile = (shader) => {
+            shader.uniforms.uSunDir = sunDirUniform;
+            shader.uniforms.uNightMap = { value: nightTex };
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <common>',
+              `#include <common>
+               varying vec3 vWorldNormalW;`
+            ).replace(
+              '#include <beginnormal_vertex>',
+              `#include <beginnormal_vertex>
+               vWorldNormalW = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);`
+            );
+            shader.fragmentShader = shader.fragmentShader.replace(
+              '#include <common>',
+              `#include <common>
+               uniform vec3 uSunDir;
+               uniform sampler2D uNightMap;
+               varying vec3 vWorldNormalW;`
+            ).replace(
+              '#include <emissivemap_fragment>',
+              `#include <emissivemap_fragment>
+               float ndotl = dot(normalize(vWorldNormalW), normalize(uSunDir));
+               float nightMask = smoothstep(0.08, -0.18, ndotl);
+               vec3 cityLights = texture2D(uNightMap, vMapUv).rgb;
+               totalEmissiveRadiance += pow(cityLights, vec3(1.35)) * vec3(1.85, 1.32, 0.65) * nightMask * 2.4;`
+            );
+          };
+          child.material.needsUpdate = true;
+        }
+      });
+      earthSpinGroup.add(gltf.scene);
+      markLoaded();
+    }, undefined, showLoadError);
+
+    gltfLoader.load(import.meta.env.BASE_URL + 'luna/luna_cientifica.glb', (gltf) => {
+      gltf.scene.scale.setScalar(R_MOON_UNITS);
+      gltf.scene.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      gltf.scene.rotation.y = Math.PI;
+      moonGroup.add(gltf.scene);
+      markLoaded();
+    }, undefined, showLoadError);
+
+    // Botón para detener / reanudar giro y traslación
+    let isPaused = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const pauseBtn = document.getElementById('toggle-pause');
+    function updatePauseButton() {
+      pauseBtn.textContent = isPaused ? 'Reanudar' : 'Detener';
+      pauseBtn.classList.toggle('active', isPaused);
+    }
+    updatePauseButton();
+    pauseBtn.addEventListener('click', () => {
+      isPaused = !isPaused;
+      updatePauseButton();
+    });
+
+    // Enfoque en Sol, Tierra, Luna o Tierra + Luna
+    let currentFocus = 'sun';
+    const focusTargetWorld = new THREE.Vector3();
+    const prevFocusWorld = new THREE.Vector3();
+    let hasPrevFocus = false;
+
+    function getFocusWorldPos(mode, outVec) {
+      scene.updateMatrixWorld(true);
+      if (mode === 'sun') {
+        outVec.set(0, 0, 0);
+      } else if (mode === 'earth' || mode === 'earth-moon') {
+        earthSystemGroup.getWorldPosition(outVec);
+      } else if (mode === 'moon') {
+        moonGroup.getWorldPosition(outVec);
+      }
+      return outVec;
+    }
+
+    function focusBody(mode) {
+      currentFocus = mode;
+      document.querySelectorAll('[data-focus]').forEach((b) => {
+        const selected = b.dataset.focus === mode;
+        b.classList.toggle('active', selected);
+        b.setAttribute('aria-pressed', String(selected));
+      });
+      const targetPos = getFocusWorldPos(mode, new THREE.Vector3());
+      controls.target.copy(targetPos);
+
+      if (mode === 'sun') {
+        camera.position.set(0, 56, 132);
+      } else if (mode === 'earth') {
+        camera.position.copy(targetPos).add(new THREE.Vector3(-6.2, 2.2, 5.5));
+      } else if (mode === 'moon') {
+        camera.position.copy(targetPos).add(new THREE.Vector3(-1.8, 0.65, 1.8));
+      } else if (mode === 'earth-moon') {
+        camera.position.copy(targetPos).add(new THREE.Vector3(-12, 9, 19));
+      }
+      prevFocusWorld.copy(targetPos);
+      hasPrevFocus = true;
+      controls.update();
+    }
+
+    document.querySelectorAll('[data-focus]').forEach((btn) => {
+      btn.addEventListener('click', () => focusBody(btn.dataset.focus));
+    });
+
+    const clock = new THREE.Clock();
+    const tmpEarthWorld = new THREE.Vector3();
+    const moveForward = new THREE.Vector3();
+    const moveRight = new THREE.Vector3();
+    const moveUp = new THREE.Vector3();
+    const moveDelta = new THREE.Vector3();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+
+      // Movimiento libre en todas direcciones (horizontal, vertical y profundidad)
+      if (keysPressed.size > 0) {
+        const distScale = Math.max(8, camera.position.distanceTo(controls.target) * 0.65);
+        const speed = (keysPressed.has('ShiftLeft') || keysPressed.has('ShiftRight') ? 2.2 : 1.0) * distScale * dt;
+
+        camera.getWorldDirection(moveForward).normalize();
+        moveRight.crossVectors(moveForward, camera.up).normalize();
+        moveUp.copy(camera.up).normalize();
+        moveDelta.set(0, 0, 0);
+
+        if (keysPressed.has('KeyW') || keysPressed.has('ArrowUp')) moveDelta.addScaledVector(moveForward, speed);
+        if (keysPressed.has('KeyS') || keysPressed.has('ArrowDown')) moveDelta.addScaledVector(moveForward, -speed);
+        if (keysPressed.has('KeyD') || keysPressed.has('ArrowRight')) moveDelta.addScaledVector(moveRight, speed);
+        if (keysPressed.has('KeyA') || keysPressed.has('ArrowLeft')) moveDelta.addScaledVector(moveRight, -speed);
+        if (keysPressed.has('KeyE') || keysPressed.has('Space')) moveDelta.addScaledVector(moveUp, speed);
+        if (keysPressed.has('KeyQ') || keysPressed.has('ControlLeft') || keysPressed.has('ControlRight')) moveDelta.addScaledVector(moveUp, -speed);
+
+        camera.position.add(moveDelta);
+        controls.target.add(moveDelta);
+      }
+
+      if (!isPaused) {
+        // Traslación y rotación visibles en torno al Sol
+        sunGroup.rotation.y += dt * 0.12;
+        earthOrbitPivot.rotation.y += dt * 0.22;
+        earthSpinGroup.rotation.y += dt * 1.4;
+        moonOrbitPivot.rotation.y += dt * 1.1;
+      }
+
+      earthSystemGroup.getWorldPosition(tmpEarthWorld);
+      sunDirUniform.value.copy(tmpEarthWorld).negate().normalize();
+
+      sunLight.position.copy(tmpEarthWorld).addScaledVector(sunDirUniform.value, 95);
+      sunLight.target.position.copy(tmpEarthWorld);
+      sunLight.target.updateMatrixWorld();
+
+      // Seguir suavemente al astro enfocado sin impedir desplazamiento libre
+      getFocusWorldPos(currentFocus, focusTargetWorld);
+      if (hasPrevFocus) {
+        const orbitDelta = focusTargetWorld.clone().sub(prevFocusWorld);
+        camera.position.add(orbitDelta);
+        controls.target.add(orbitDelta);
+      }
+      prevFocusWorld.copy(focusTargetWorld);
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
+

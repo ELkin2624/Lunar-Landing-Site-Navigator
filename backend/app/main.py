@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI):
     cache_path = os.getenv("LUNARPATH_CACHE_DB", str(default_cache))
     cache_enabled = os.getenv("LUNARPATH_CACHE_ENABLED", "true").lower() in ("true", "1", "yes")
     app.state.cache = EphemerisCache(cache_path) if cache_enabled else None
+    app.state.calendar_profiles = {}
 
     async with httpx.AsyncClient(timeout=30, limits=httpx.Limits(max_connections=10)) as client:
         app.state.horizons = HorizonsClient(client, cache=app.state.cache)
@@ -781,6 +782,107 @@ async def analyze_legacy(payload: LegacyAnalyzeRequest, request: Request) -> Leg
         sampling_minutes=result.timeline.transition_resolution_minutes,
         transition_uncertainty_minutes=result.timeline.transition_resolution_minutes,
         precision_note=result.precision_note,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Illumination calendar
+# ---------------------------------------------------------------------------
+
+
+class IlluminationCalendarRequest(BaseModel):
+    latitude: float = Field(ge=-90, le=-75)
+    longitude: float = Field(ge=-180, le=180)
+    year: int = Field(ge=1900, le=2200)
+    month: int = Field(ge=1, le=12)
+    step_minutes: int = Field(default=60, ge=10, le=180)
+
+
+class IlluminationDay(BaseModel):
+    date: str
+    sunlit_percent: float
+    level: str
+    max_sun_elevation_deg: float
+    max_clearance_deg: float
+    best_time_utc: str
+    sun_azimuth_deg: float
+    sun_elevation_deg: float
+
+
+class IlluminationCalendarResponse(BaseModel):
+    latitude: float
+    longitude: float
+    year: int
+    month: int
+    horizon_source: str
+    thresholds: dict[str, float]
+    days: list[IlluminationDay]
+
+
+CALENDAR_THRESHOLDS = {"favorable": 70.0, "partial": 30.0}
+
+
+def _illumination_level(sunlit_percent: float) -> str:
+    if sunlit_percent <= 0:
+        return "none"
+    if sunlit_percent >= CALENDAR_THRESHOLDS["favorable"]:
+        return "favorable"
+    if sunlit_percent >= CALENDAR_THRESHOLDS["partial"]:
+        return "partial"
+    return "minimal"
+
+
+@app.post("/api/v1/illumination/calendar", response_model=IlluminationCalendarResponse, tags=["Scenarios"])
+async def illumination_calendar(payload: IlluminationCalendarRequest, request: Request) -> IlluminationCalendarResponse:
+    from calendar import monthrange
+    from datetime import datetime, timezone
+
+    dem: LolaDem | None = request.app.state.dem
+    if dem is None:
+        raise HTTPException(status_code=503, detail="LOLA DEM is not installed; run scripts/download_lola.py")
+    site = Site(latitude_deg=payload.latitude, longitude_deg=payload.longitude)
+    profiles: dict = request.app.state.calendar_profiles
+    key = (round(site.latitude_deg, 4), round(site.longitude_deg, 4))
+    if key not in profiles:
+        try:
+            profiles[key] = await run_in_threadpool(horizon_profile, dem, site, fine_dem=request.app.state.fine_dem)
+        except (TerrainError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    profile, height_km = profiles[key]
+    site = site.model_copy(update={"height_km": height_km})
+
+    start = datetime(payload.year, payload.month, 1, tzinfo=timezone.utc)
+    end = start + timedelta(days=monthrange(payload.year, payload.month)[1])
+    try:
+        rows = await request.app.state.horizons.positions(10, site, start, end, payload.step_minutes)
+    except HorizonsError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    by_day: dict[str, list] = {}
+    for time_utc, azimuth, elevation in rows:
+        if time_utc >= end:
+            continue
+        by_day.setdefault(time_utc.strftime("%Y-%m-%d"), []).append((time_utc, azimuth, elevation, position(azimuth, elevation, profile, is_sun=True)))
+
+    days: list[IlluminationDay] = []
+    for date, samples in sorted(by_day.items()):
+        lit = sum(1 for *_, pos in samples if pos.visible)
+        sunlit_percent = round(100 * lit / len(samples), 1)
+        best = max(samples, key=lambda item: item[2] - item[3].horizon_deg)
+        days.append(IlluminationDay(
+            date=date,
+            sunlit_percent=sunlit_percent,
+            level=_illumination_level(sunlit_percent),
+            max_sun_elevation_deg=round(max(item[2] for item in samples), 3),
+            max_clearance_deg=round(best[2] - best[3].horizon_deg, 3),
+            best_time_utc=best[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
+            sun_azimuth_deg=round(best[1], 3),
+            sun_elevation_deg=round(best[2], 3),
+        ))
+    source = "LOLA_20M_NEAR_240M_FAR" if any(p.obstacle_pixel_scale_m == 20 for p in profile) else "LOLA_LDEM_75S_240M_PDS"
+    return IlluminationCalendarResponse(
+        latitude=payload.latitude, longitude=payload.longitude, year=payload.year, month=payload.month,
+        horizon_source=source, thresholds=CALENDAR_THRESHOLDS, days=days,
     )
 
 

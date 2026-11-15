@@ -1,0 +1,53 @@
+.planning-orbit-viewer {
+  position: relative;
+  max-width: 600px;
+  margin-inline: auto;
+}
+
+.planning-orbit-frame {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-height: 280px;
+  border: 0;
+  border-radius: 11px;
+  background: #010308;
+}
+
+.planning-orbit-viewer:fullscreen {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  background: #010308;
+}
+
+.planning-orbit-viewer:fullscreen .planning-orbit-frame {
+  height: 100%;
+  border-radius: 0;
+}
+
+.planning-orbit-fullscreen,
+.planning-orbit-fullscreen-error {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  max-width: calc(100% - 20px);
+  background: #0d1523;
+  color: #f8fafc;
+  border: 1px solid #475569;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.planning-orbit-fullscreen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+}
+
+.planning-orbit-fullscreen-error {
+  top: 54px;
+}

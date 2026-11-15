@@ -4,33 +4,22 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { apiEnabled, fetchNacTexture, fetchTerrainMesh, type TerrainMesh } from './api'
 import type { Sample, Site } from './data'
+import { bodyVector, globeDirection } from './three/lunarFrame'
 
 type View = 'local' | 'globe'
 type Body = 'moon' | 'sun' | 'earth'
 type Quality = 'auto' | 'high' | 'save'
 
-function bodyVector(latitude: number, longitude: number): THREE.Vector3 {
-  const lat = THREE.MathUtils.degToRad(latitude)
-  const lon = THREE.MathUtils.degToRad(longitude)
-  return new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon))
-}
-
 function sunDirection(site: Site, sample: Sample, view: View): THREE.Vector3 {
-  const az = THREE.MathUtils.degToRad(sample.sunAzimuth ?? 0)
-  const el = THREE.MathUtils.degToRad(sample.sunElevation)
-  const lon = THREE.MathUtils.degToRad(site.lon)
   if (view === 'local') {
+    const az = THREE.MathUtils.degToRad(sample.sunAzimuth ?? 0)
+    const el = THREE.MathUtils.degToRad(sample.sunElevation)
+    const lon = THREE.MathUtils.degToRad(site.lon)
     const east = Math.cos(el) * Math.sin(az)
     const north = Math.cos(el) * Math.cos(az)
     return new THREE.Vector3(east * Math.cos(lon) + north * Math.sin(lon), Math.sin(el), east * Math.sin(lon) - north * Math.cos(lon)).normalize()
   }
-  const lat = THREE.MathUtils.degToRad(site.lat)
-  const up = bodyVector(site.lat, site.lon)
-  const east = new THREE.Vector3(-Math.sin(lon), 0, -Math.cos(lon))
-  const north = new THREE.Vector3(-Math.sin(lat) * Math.cos(lon), Math.cos(lat), Math.sin(lat) * Math.sin(lon))
-  return east.multiplyScalar(Math.cos(el) * Math.sin(az))
-    .add(north.multiplyScalar(Math.cos(el) * Math.cos(az)))
-    .add(up.multiplyScalar(Math.sin(el))).normalize()
+  return globeDirection(site.lat, site.lon, sample.sunAzimuth ?? 0, sample.sunElevation)
 }
 
 function localGeometry(mesh: TerrainMesh, useLocalTexture: boolean): THREE.BufferGeometry {

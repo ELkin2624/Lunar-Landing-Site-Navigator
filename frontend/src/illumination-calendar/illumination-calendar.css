@@ -1,0 +1,90 @@
+.illum-view { background: #070b14; color: #e9eef4; border-radius: 16px; padding: clamp(20px, 3vw, 34px); display: grid; gap: 18px; }
+.illum-kicker { font-size: 10px; font-weight: 800; letter-spacing: .13em; color: #6fa0ff; }
+.illum-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+.illum-heading h1 { font-size: 30px; letter-spacing: -.035em; margin: 8px 0; color: #f3f6fc; }
+.illum-heading p { font-size: 13px; line-height: 1.6; color: #9aacc8; max-width: 620px; }
+.illum-month-nav { display: flex; align-items: center; gap: 8px; }
+.illum-month-nav strong { min-width: 150px; text-align: center; font-size: 15px; }
+.illum-month-nav button { display: grid; place-items: center; height: 34px; min-width: 34px; padding: 0 10px; border: 1px solid #1d2a44; border-radius: 8px; background: #0d1626; color: #e9eef4; font-size: 12px; font-weight: 700; }
+.illum-month-nav button:hover { border-color: #3a5a8c; }
+
+.illum-calendar { position: relative; background: #0d1626; border: 1px solid #1d2a44; border-radius: 14px; padding: 18px; }
+.illum-weekdays, .illum-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.illum-weekdays span { text-align: center; font-size: 10px; font-weight: 800; letter-spacing: .1em; color: #7e93b3; text-transform: uppercase; padding-bottom: 8px; }
+.illum-cell { position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; min-height: 58px; padding: 7px 9px; border: 1px solid #1d2a44; border-radius: 9px; background: #0a111f; color: #9aacc8; font: inherit; text-align: left; }
+.illum-cell.empty { border-color: transparent; background: transparent; }
+.illum-cell:not(:disabled) { cursor: pointer; }
+.illum-cell:not(:disabled):hover { filter: brightness(1.18); }
+.illum-cell:disabled { opacity: .45; }
+.illum-number { font-size: 13px; font-weight: 700; }
+.illum-percent { font-size: 10px; font-weight: 700; opacity: .9; }
+.illum-cell.today .illum-number { text-decoration: underline; text-underline-offset: 3px; }
+.illum-cell.selected { outline: 2px solid #e9eef4; outline-offset: 1px; }
+.illum-cell.level-favorable { background: #10301f; border-color: #2f9e6e; color: #7fe0b0; }
+.illum-cell.level-partial { background: #33290f; border-color: #d4a72c; color: #f2cf6b; }
+.illum-cell.level-minimal { background: #34161a; border-color: #d0565c; color: #f1949a; }
+.illum-overlay { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 14px; background: #070b14b3; color: #bcd3ff; font-size: 12px; font-weight: 700; }
+.illum-error { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: #34161a; color: #f1949a; font-size: 12px; }
+.illum-legend { display: flex; flex-wrap: wrap; gap: 10px 20px; margin-top: 16px; font-size: 11px; color: #9aacc8; }
+.illum-legend span { display: flex; align-items: center; gap: 7px; }
+.illum-legend b { color: #e9eef4; }
+.illum-legend i { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #1d2a44; background: #0a111f; }
+.illum-legend i.level-favorable { background: #2f9e6e; border-color: #2f9e6e; }
+.illum-legend i.level-partial { background: #d4a72c; border-color: #d4a72c; }
+.illum-legend i.level-minimal { background: #d0565c; border-color: #d0565c; }
+
+.illum-detail { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr); gap: 18px; }
+.illum-moon-panel { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid #1d2a44; background: radial-gradient(ellipse at 50% 40%, #141f36 0%, #05080f 70%); }
+.illum-moon { position: relative; height: clamp(320px, 46vh, 520px); }
+.illum-moon canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.illum-moon canvas:active { cursor: grabbing; }
+.illum-moon-status { position: absolute; inset: 0; display: grid; place-items: center; color: #9aacc8; font-size: 12px; }
+.illum-moon-caption { position: absolute; left: 14px; bottom: 12px; color: #8ea0bd; font-size: 10px; letter-spacing: .04em; pointer-events: none; }
+
+.illum-stats { background: #0d1626; border: 1px solid #1d2a44; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+.illum-stats h2 { font-size: 19px; margin: 0; color: #f3f6fc; }
+.illum-badge { align-self: flex-start; padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #12203a; color: #9aacc8; }
+.illum-badge.level-favorable { background: #10301f; color: #7fe0b0; }
+.illum-badge.level-partial { background: #33290f; color: #f2cf6b; }
+.illum-badge.level-minimal { background: #34161a; color: #f1949a; }
+.illum-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.illum-stat-grid div { background: #10192c; border-radius: 9px; padding: 11px 12px; }
+.illum-stat-grid span { display: block; font-size: 10px; color: #8ea0bd; }
+.illum-stat-grid strong { display: block; margin-top: 4px; font-size: 15px; color: #e9eef4; }
+.illum-best { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; border: 0; border-radius: 8px; padding: 10px 13px; background: var(--brand-blue); color: #fff; font-size: 12px; font-weight: 700; }
+.illum-best:hover { background: var(--brand-hover); }
+.illum-note { font-size: 11px; line-height: 1.6; color: #8ea0bd; }
+
+@media (max-width: 900px) { .illum-detail { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .illum-cell { min-height: 46px; padding: 5px 6px; }
+  .illum-percent { display: none; }
+  .illum-stat-grid { grid-template-columns: 1fr; }
+}
+
+[data-theme='light'] .illum-view { background: var(--page); color: #182b43; }
+[data-theme='light'] .illum-heading h1, [data-theme='light'] .illum-stats h2 { color: var(--ink); }
+[data-theme='light'] .illum-kicker { color: var(--brand-blue); }
+[data-theme='light'] .illum-heading p { color: #687990; }
+[data-theme='light'] .illum-month-nav button { background: #fff; border-color: #d6e0ef; color: #182b43; }
+[data-theme='light'] .illum-calendar, [data-theme='light'] .illum-stats { background: #fff; border-color: transparent; box-shadow: 0 8px 30px #253c5b0b; }
+[data-theme='light'] .illum-weekdays span { color: #75869d; }
+[data-theme='light'] .illum-cell { background: #f5f8fc; border-color: #e2e9f2; color: #52677f; }
+[data-theme='light'] .illum-cell.empty { background: transparent; border-color: transparent; }
+[data-theme='light'] .illum-cell.selected { outline-color: #182b43; }
+[data-theme='light'] .illum-cell.level-favorable { background: #dcf3e8; border-color: #2f9e6e; color: #1d6b48; }
+[data-theme='light'] .illum-cell.level-partial { background: #fbf0cf; border-color: #d4a72c; color: #7d5f0f; }
+[data-theme='light'] .illum-cell.level-minimal { background: #fbe0e1; border-color: #d0565c; color: #9a2f35; }
+[data-theme='light'] .illum-overlay { background: #f3f6fcc7; color: var(--brand-blue); }
+[data-theme='light'] .illum-error { background: #fbe0e1; color: #9a2f35; }
+[data-theme='light'] .illum-legend { color: #65778d; }
+[data-theme='light'] .illum-legend b { color: #182b43; }
+[data-theme='light'] .illum-legend i.level-none { background: #f5f8fc; border-color: #d6e0ef; }
+[data-theme='light'] .illum-badge { background: #eff2f7; color: #65738a; }
+[data-theme='light'] .illum-badge.level-favorable { background: #dcf3e8; color: #1d6b48; }
+[data-theme='light'] .illum-badge.level-partial { background: #fbf0cf; color: #7d5f0f; }
+[data-theme='light'] .illum-badge.level-minimal { background: #fbe0e1; color: #9a2f35; }
+[data-theme='light'] .illum-stat-grid div { background: #edf4ff; }
+[data-theme='light'] .illum-stat-grid span { color: #6e8099; }
+[data-theme='light'] .illum-stat-grid strong { color: #203957; }
+[data-theme='light'] .illum-note { color: #687990; }

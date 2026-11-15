@@ -1,0 +1,188 @@
+:root {
+  color-scheme: light;
+  --page: #f3f6fc;
+  --surface: #fff;
+  --surface-soft: #f7f9fd;
+  --surface-blue: #edf3ff;
+  --ink: #12243b;
+  --muted: #53647a;
+  --line: #d6e0ef;
+  --brand-blue: #245ac5;
+  --brand-hover: #1d4eae;
+  --gold: #98570c;
+  --gold-soft: #fff3df;
+  --success: #24644e;
+  --success-soft: #e7f5ee;
+  --danger: #983c44;
+  --danger-soft: #fbecef;
+  --card-radius: 15px;
+  --card-shadow: 0 8px 28px #233d6410;
+  color: var(--ink);
+  background: var(--page);
+}
+
+:root[data-theme='dark'] {
+  color: #e9eef4;
+  background: #080d17;
+}
+
+:where(button, a, input, select):focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 3px;
+}
+
+.home-shell { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: #070b14; color: #e9eef4; color-scheme: dark; }
+.home-header {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 13px;
+  padding: 16px clamp(22px, 5vw, 78px);
+  min-height: 62px;
+  border-bottom: 1px solid #1d2a44;
+  background: #0a0f1c;
+  letter-spacing: .06em;
+  color: #e9eef4;
+}
+.home-header strong span { color: #5e9bff; }
+.home-content { flex: 1; min-height: 0; max-width: 1680px; width: 100%; margin-inline: auto; overflow: hidden; }
+.home-content .education-view { border-radius: 0; height: 100%; }
+@media (max-width: 900px), (max-height: 560px) {
+  .home-shell { height: auto; min-height: 100vh; overflow: visible; }
+  .home-content { overflow: visible; }
+}
+
+:root[data-theme='light'] .app-shell { background: var(--page); }
+:root[data-theme='light'] .sidebar, :root[data-theme='light'] .topbar {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme='light'] .sidebar .brand-symbol {
+  background: var(--surface-blue);
+  color: var(--brand-blue);
+  border-color: #81a5e3;
+}
+:root[data-theme='light'] .sidebar .brand-symbol span { border-color: #81a5e3; }
+.home-header .brand-symbol { background: #14203a; color: #5e9bff; border-color: #2a3c5e; }
+.home-header .brand-symbol span { border-color: #2a3c5e; }
+:root[data-theme='light'] .brand strong span, :root[data-theme='light'] .eyebrow, :root[data-theme='light'] .section-kicker { color: var(--brand-blue); }
+:root[data-theme='light'] .eyebrow span, :root[data-theme='light'] .live-dot, :root[data-theme='light'] .active-indicator { background: var(--brand-blue); }
+:root[data-theme='light'] .heading-star { color: var(--brand-blue); }
+:root[data-theme='light'] .brand small, :root[data-theme='light'] .sidebar-section-title, :root[data-theme='light'] .sidebar-note, :root[data-theme='light'] .sites-title span, :root[data-theme='light'] .breadcrumbs, :root[data-theme='light'] .page-heading p, :root[data-theme='light'] .empty-search, :root[data-theme='light'] .site-item small, :root[data-theme='light'] .site-search input::placeholder { color: var(--muted); }
+:root[data-theme='light'] .breadcrumbs strong, :root[data-theme='light'] .site-item strong, :root[data-theme='light'] .site-search input { color: var(--ink); }
+:root[data-theme='light'] .nav-item, :root[data-theme='light'] .site-item, :root[data-theme='light'] .mobile-menu, :root[data-theme='light'] .mobile-close { color: var(--muted); }
+:root[data-theme='light'] .nav-item:hover, :root[data-theme='light'] .nav-item.selected, :root[data-theme='light'] .site-item.active, :root[data-theme='light'] .site-item:hover {
+  color: var(--brand-blue);
+  background: var(--surface-blue);
+}
+:root[data-theme='light'] .nav-item.selected { box-shadow: inset 3px 0 var(--brand-blue); }
+:root[data-theme='light'] .site-item.active, :root[data-theme='light'] .site-item:hover, :root[data-theme='light'] .site-number, :root[data-theme='light'] .top-divider { border-color: var(--line); }
+:root[data-theme='light'] .site-number { color: var(--muted); }
+:root[data-theme='light'] .active .site-number { color: var(--brand-blue); border-color: #7da1e7; }
+:root[data-theme='light'] .site-search { background: var(--surface-soft); border-color: var(--line); color: var(--muted); }
+:root[data-theme='light'] .mission-card {
+  background: linear-gradient(135deg, #dce9ff, var(--surface-blue));
+  border-color: #c9daf7;
+  color: var(--ink);
+}
+:root[data-theme='light'] .mission-card small, :root[data-theme='light'] .mission-card-foot { color: var(--muted); }
+:root[data-theme='light'] .mini-orbit { border-color: #6892d5; }
+:root[data-theme='light'] .mini-orbit span { background: var(--brand-blue); }
+:root[data-theme='light'] .avatar { background: var(--surface-blue); color: var(--brand-blue); }
+:root[data-theme='light'] .source-pill { background: var(--gold-soft); border-color: #edcf9d; color: var(--gold); }
+:root[data-theme='light'] .source-pill.api { background: var(--success-soft); border-color: #b5ddcc; color: var(--success); }
+:root[data-theme='light'] .source-pill.api .live-dot { background: var(--success); }
+:root[data-theme='light'] .source-pill:not(.api) .live-dot { background: var(--gold); }
+
+:root[data-theme='light'] .panel, :root[data-theme='light'] .metric-card {
+  background: var(--surface);
+  border-color: var(--line);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+:root[data-theme='light'] .primary-button, :root[data-theme='light'] .coordinate-form button {
+  background: var(--brand-blue);
+  color: white;
+  border-color: var(--brand-blue);
+}
+:root[data-theme='light'] .primary-button:not(:disabled):hover, :root[data-theme='light'] .coordinate-form button:hover { background: var(--brand-hover); }
+:root[data-theme='light'] .primary-button:disabled, :root[data-theme='light'] .outline-button:disabled { opacity: .55; cursor: not-allowed; }
+:root[data-theme='light'] .outline-button, :root[data-theme='light'] .icon-button {
+  background: var(--surface);
+  color: var(--brand-blue);
+  border-color: var(--line);
+}
+:root[data-theme='light'] .outline-button:not(:disabled):hover { background: var(--surface-blue); }
+:root[data-theme='light'] .notice { background: var(--surface-blue); color: var(--muted); border-color: #cfdef8; }
+:root[data-theme='light'] .notice strong, :root[data-theme='light'] .notice-icon { color: var(--brand-blue); }
+:root[data-theme='light'] .notice-icon { background: #dce8ff; }
+:root[data-theme='light'] .notice[role='alert'] { background: var(--danger-soft); border-color: #f3ccd4; }
+:root[data-theme='light'] .notice[role='alert'] strong { color: var(--danger); }
+:root[data-theme='light'] .selected-pin, :root[data-theme='light'] .timestamp { background: var(--surface-blue); color: var(--brand-blue); }
+:root[data-theme='light'] .selected-site small, :root[data-theme='light'] .selected-site div span, :root[data-theme='light'] .selected-site > svg, :root[data-theme='light'] .muted-icon, :root[data-theme='light'] .field-label, :root[data-theme='light'] .field-hint, :root[data-theme='light'] .analyst-fields label, :root[data-theme='light'] .period-label, :root[data-theme='light'] .metric-top, :root[data-theme='light'] .metric-value small, :root[data-theme='light'] .metric-detail, :root[data-theme='light'] .timeline-help, :root[data-theme='light'] .timeline-name, :root[data-theme='light'] .timeline-labels, :root[data-theme='light'] .horizon-note, :root[data-theme='light'] .coordinate-title, :root[data-theme='light'] .coordinate-form label, :root[data-theme='light'] .map-caption, :root[data-theme='light'] .slope-threshold-control, :root[data-theme='light'] .slope-scale-buttons, :root[data-theme='light'] .slope-stat small, :root[data-theme='light'] .slope-stat span, :root[data-theme='light'] .slope-disclaimer, :root[data-theme='light'] .terrain-3d-message, :root[data-theme='light'] .terrain-3d-note, :root[data-theme='light'] .data-unavailable p, :root[data-theme='light'] .comparison-selectors label, :root[data-theme='light'] .table-head, :root[data-theme='light'] .table-row span, :root[data-theme='light'] .compare-aside p, :root[data-theme='light'] .compare-mini span, :root[data-theme='light'] .feasibility-top span, :root[data-theme='light'] .criteria-list > div {
+  color: var(--muted);
+}
+:root[data-theme='light'] .analyst-fields strong, :root[data-theme='light'] .text-button, :root[data-theme='light'] .trek-link, :root[data-theme='light'] .slope-disclaimer a, :root[data-theme='light'] .versus, :root[data-theme='light'] .slope-threshold-control strong, :root[data-theme='light'] .slope-scale-pill strong, :root[data-theme='light'] .table-row strong.winner, :root[data-theme='light'] .compare-mini span svg, :root[data-theme='light'] .compare-mini strong svg { color: var(--brand-blue); }
+:root[data-theme='light'] .coordinate-error { color: var(--danger); }
+
+:root[data-theme='light'] .date-input, :root[data-theme='light'] .select-like, :root[data-theme='light'] .coordinate-form input, :root[data-theme='light'] .comparison-selectors select, :root[data-theme='light'] .site-select-display, :root[data-theme='light'] .data-unavailable input {
+  color-scheme: light;
+  background: var(--surface-soft);
+  border-color: var(--line);
+  color: var(--ink);
+}
+:root[data-theme='light'] .mode-toggle, :root[data-theme='light'] .terrain-view-toggle { background: var(--surface-blue); border-color: var(--line); }
+:root[data-theme='light'] .mode-toggle button, :root[data-theme='light'] .terrain-view-toggle button { color: var(--muted); }
+:root[data-theme='light'] .mode-toggle button.active, :root[data-theme='light'] .terrain-view-toggle button.active {
+  background: var(--brand-blue);
+  color: white;
+}
+:root[data-theme='light'] .control-divider { background: var(--line); }
+:root[data-theme='light'] .analyst-fields input, :root[data-theme='light'] .slope-threshold-control input, :root[data-theme='light'] .time-slider { accent-color: var(--brand-blue); }
+:root[data-theme='light'] .metric-label, :root[data-theme='light'] .timeline-row strong, :root[data-theme='light'] .criteria-list strong, :root[data-theme='light'] .table-head strong, :root[data-theme='light'] .table-row strong, :root[data-theme='light'] .compare-mini strong, :root[data-theme='light'] .slope-stat strong { color: var(--ink); }
+:root[data-theme='light'] .amber-bg, :root[data-theme='light'] .status-badge.good { background: var(--gold-soft); color: var(--gold); }
+:root[data-theme='light'] .blue-bg, :root[data-theme='light'] .status-badge.blue-badge { background: var(--surface-blue); color: var(--brand-blue); }
+:root[data-theme='light'] .purple-bg { background: #efeafa; color: #654b93; }
+:root[data-theme='light'] .mint-bg, :root[data-theme='light'] .criteria-ok { background: var(--success-soft); color: var(--success); }
+:root[data-theme='light'] .status-badge.bad, :root[data-theme='light'] .criteria-no { background: var(--danger-soft); color: var(--danger); }
+:root[data-theme='light'] .timeline-row:first-child .timeline-name svg { color: var(--gold); }
+:root[data-theme='light'] .timeline-row:nth-child(2) .timeline-name svg { color: var(--brand-blue); }
+:root[data-theme='light'] .timeline-chart { background: var(--surface-blue); border-color: var(--line); }
+:root[data-theme='light'] .feasibility-top { background: var(--surface-soft); border-color: var(--line); }
+:root[data-theme='light'] .score-orb { border-color: #d4974b; color: var(--gold); }
+:root[data-theme='light'] .score-orb.pass { border-color: #79b9a0; color: var(--success); }
+:root[data-theme='light'] .criteria-list > div, :root[data-theme='light'] .comparison-table, :root[data-theme='light'] .table-head, :root[data-theme='light'] .table-row, :root[data-theme='light'] .compare-mini, :root[data-theme='light'] footer { border-color: var(--line); }
+:root[data-theme='light'] .table-head { background: var(--surface-blue); }
+footer { color: var(--muted); }
+
+:root[data-theme='light'] .slope-scale-buttons button, :root[data-theme='light'] .slope-stat, :root[data-theme='light'] .slope-scale-pill, :root[data-theme='light'] .slope-unavailable {
+  background: var(--surface-soft);
+  border-color: var(--line);
+  color: var(--muted);
+}
+:root[data-theme='light'] .slope-scale-buttons button.active { background: var(--brand-blue); border-color: var(--brand-blue); color: white; }
+:root[data-theme='light'] .slope-stat.slope-within { border-color: #b5ddcc; background: var(--success-soft); }
+:root[data-theme='light'] .slope-stat.slope-exceeds { border-color: #f0ccd4; background: var(--danger-soft); }
+:root[data-theme='light'] .terrain-3d-status, :root[data-theme='light'] .terrain-3d-status span:last-child { color: var(--muted); }
+:root[data-theme='light'] .terrain-3d-status span { background: var(--surface-blue); border-color: var(--line); }
+:root[data-theme='light'] .terrain-3d-status span:last-child { background: transparent; }
+:root[data-theme='light'] .terrain-3d-caution { color: var(--gold); background: var(--gold-soft); border-color: #edcf9d; }
+:root[data-theme='light'] .body-explorer button, :root[data-theme='light'] .body-explorer-detail, :root[data-theme='light'] .explore-guide button {
+  background: var(--surface-blue);
+  color: var(--ink);
+  border-color: var(--line);
+}
+:root[data-theme='light'] .body-explorer button.active, :root[data-theme='light'] .explore-guide button:hover, :root[data-theme='light'] .explore-guide button:focus-visible {
+  background: #dce8ff;
+  color: var(--ink);
+  border-color: var(--brand-blue);
+}
+:root[data-theme='light'] .body-explorer button span { color: var(--muted); }
+:root[data-theme='light'] .body-explorer-detail { border-left-color: var(--brand-blue); }
+:root[data-theme='light'] .explore-guide > span { color: var(--brand-blue); }
+:root[data-theme='light'] .explore-guide button strong { background: var(--brand-blue); color: white; }
+:root[data-theme='light'] .orbital-loading .section-kicker { color: #a9c6ff; }
+
+@media (max-width: 900px) {
+:root[data-theme='light'] .sidebar { overflow-y: auto; box-shadow: 12px 0 36px #13284729; }
+}
