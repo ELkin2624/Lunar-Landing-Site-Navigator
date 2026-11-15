@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Sun } from 'lucide-react'
 import { fetchIlluminationCalendar, type IlluminationCalendar, type IlluminationDay, type IlluminationLevel } from '../api'
 import type { Site } from '../data'
 import { useLoading } from '../LoadingContext'
+import { PolarSiteInset } from './PolarSiteInset'
 import './illumination-calendar.css'
 
 const IlluminationMoon = lazy(() => import('./IlluminationMoon').then(module => ({ default: module.IlluminationMoon })))
@@ -25,7 +26,7 @@ function bestDay(days: IlluminationDay[]): IlluminationDay | undefined {
   return [...days].sort((a, b) => b.sunlitPercent - a.sunlitPercent || b.maxClearanceDeg - a.maxClearanceDeg)[0]
 }
 
-export function IlluminationCalendarView({ site }: { site: Site }) {
+export function IlluminationCalendarView({ site, onPick }: { site: Site; onPick: (latitude: number, longitude: number) => void }) {
   const { startLoading, stopLoading } = useLoading()
   const today = new Date()
   const [year, setYear] = useState(today.getUTCFullYear())
@@ -34,7 +35,19 @@ export function IlluminationCalendarView({ site }: { site: Site }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [latitude, setLatitude] = useState(String(site.lat))
+  const [longitude, setLongitude] = useState(String(site.lon))
   const cache = useRef(new Map<string, IlluminationCalendar>())
+
+  useEffect(() => { setLatitude(String(site.lat)); setLongitude(String(site.lon)) }, [site.lat, site.lon])
+
+  const pickCoordinates = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const lat = Number(latitude)
+    const lon = Number(longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > -75 || lon < -180 || lon > 180) return
+    onPick(Number(lat.toFixed(3)), Number(lon.toFixed(3)))
+  }
 
   useEffect(() => {
     if (loading) {
@@ -119,6 +132,14 @@ export function IlluminationCalendarView({ site }: { site: Site }) {
       </div>
     </div>
 
+    <form className="illum-coordinate-form" onSubmit={pickCoordinates}>
+      <span>Elegir punto personalizado:</span>
+      <label>Latitud ° <input type="number" min="-90" max="-75" step="0.001" value={latitude} onChange={event => setLatitude(event.target.value)} required/></label>
+      <label>Longitud ° <input type="number" min="-180" max="180" step="0.001" value={longitude} onChange={event => setLongitude(event.target.value)} required/></label>
+      <button type="submit">Ver calendario</button>
+      <small>También puedes pulsar el mapa polar junto al globo.</small>
+    </form>
+
     <section className="illum-calendar" aria-busy={loading}>
       <div className="illum-weekdays">{WEEKDAYS.map(name => <span key={name}>{name}</span>)}</div>
       <div className="illum-grid">
@@ -149,12 +170,13 @@ export function IlluminationCalendarView({ site }: { site: Site }) {
 
     <section className="illum-detail">
       <div className="illum-moon-panel">
+        <PolarSiteInset site={site} onPick={onPick}/>
         {selected
           ? <Suspense fallback={<div className="illum-moon"><span className="illum-moon-status">Cargando modelo lunar…</span></div>}>
               <IlluminationMoon latitude={site.lat} longitude={site.lon} sunAzimuthDeg={selected.sunAzimuthDeg} sunElevationDeg={selected.sunElevationDeg}/>
             </Suspense>
           : <div className="illum-moon"><span className="illum-moon-status">Selecciona una fecha del calendario</span></div>}
-        <span className="illum-moon-caption">Arrastra para rotar · rueda para acercar · punto azul: {site.name}</span>
+        <span className="illum-moon-caption">Arrastra para rotar · rueda para acercar · punto azul: {site.name} · luz global en «Mejor momento»</span>
       </div>
       <div className="illum-stats">
         {selected ? <>

@@ -3,6 +3,12 @@
 .illum-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
 .illum-heading h1 { font-size: 30px; letter-spacing: -.035em; margin: 8px 0; color: #f3f6fc; }
 .illum-heading p { font-size: 13px; line-height: 1.6; color: #9aacc8; max-width: 620px; }
+.illum-coordinate-form { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; color: #9aacc8; font-size: 11px; }
+.illum-coordinate-form > span { align-self: center; font-weight: 700; }
+.illum-coordinate-form label { display: grid; gap: 4px; }
+.illum-coordinate-form input { width: 105px; padding: 7px; border: 1px solid #344766; border-radius: 6px; background: #0d1626; color: #e9eef4; }
+.illum-coordinate-form button { padding: 8px 12px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; font-weight: 700; cursor: pointer; }
+.illum-coordinate-form small { align-self: center; }
 .illum-month-nav { display: flex; align-items: center; gap: 8px; }
 .illum-month-nav strong { min-width: 150px; text-align: center; font-size: 15px; }
 .illum-month-nav button { display: grid; place-items: center; height: 34px; min-width: 34px; padding: 0 10px; border: 1px solid #1d2a44; border-radius: 8px; background: #0d1626; color: #e9eef4; font-size: 12px; font-weight: 700; }
@@ -40,6 +46,18 @@
 .illum-moon canvas:active { cursor: grabbing; }
 .illum-moon-status { position: absolute; inset: 0; display: grid; place-items: center; color: #9aacc8; font-size: 12px; }
 .illum-moon-caption { position: absolute; left: 14px; bottom: 12px; color: #8ea0bd; font-size: 10px; letter-spacing: .04em; pointer-events: none; }
+.illum-polar-inset { position: absolute; z-index: 2; top: 12px; right: 12px; width: 184px; padding: 9px; border: 1px solid #4c638488; border-radius: 10px; background: #081321e8; color: #dbe8fc; box-shadow: 0 4px 18px #0007; }
+.illum-polar-inset > strong { display: block; font-size: 9px; letter-spacing: .08em; }
+.illum-polar-inset svg { display: block; width: 100%; margin: 3px auto; cursor: crosshair; }
+.illum-polar-inset > span { display: block; font-size: 9px; line-height: 1.35; }
+.polar-grid { fill: none; stroke: #7191bb77; stroke-width: 1; }
+.polar-axis { fill: none; stroke: #7191bb55; stroke-width: 1; }
+.polar-pole-label, .polar-ring-label { fill: #98b0cf; font-size: 7px; }
+.polar-site { fill: #aebed2; stroke: #06101c; stroke-width: 1; }
+.polar-site.active { fill: #59a1ff; }
+.polar-selection-ring { fill: none; stroke: #59a1ff; stroke-width: 1.5; }
+.polar-site-label { fill: #d3ddec; font-size: 9px; font-weight: 700; paint-order: stroke; stroke: #081321; stroke-width: 2px; }
+.polar-site-label.active { fill: #79b6ff; }
 
 .illum-stats { background: #0d1626; border: 1px solid #1d2a44; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
 .illum-stats h2 { font-size: 19px; margin: 0; color: #f3f6fc; }
@@ -57,6 +75,7 @@
 
 @media (max-width: 900px) { .illum-detail { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
+  .illum-polar-inset { width: 132px; }
   .illum-cell { min-height: 46px; padding: 5px 6px; }
   .illum-percent { display: none; }
   .illum-stat-grid { grid-template-columns: 1fr; }
@@ -66,6 +85,8 @@
 [data-theme='light'] .illum-heading h1, [data-theme='light'] .illum-stats h2 { color: var(--ink); }
 [data-theme='light'] .illum-kicker { color: var(--brand-blue); }
 [data-theme='light'] .illum-heading p { color: #687990; }
+[data-theme='light'] .illum-coordinate-form { color: #53647a; }
+[data-theme='light'] .illum-coordinate-form input { background: #fff; color: #182b43; border-color: #d6e0ef; }
 [data-theme='light'] .illum-month-nav button { background: #fff; border-color: #d6e0ef; color: #182b43; }
 [data-theme='light'] .illum-calendar, [data-theme='light'] .illum-stats { background: #fff; border-color: transparent; box-shadow: 0 8px 30px #253c5b0b; }
 [data-theme='light'] .illum-weekdays span { color: #75869d; }

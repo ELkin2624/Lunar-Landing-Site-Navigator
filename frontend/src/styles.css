@@ -478,6 +478,7 @@
 .compare-slot label{font-size:10px;letter-spacing:.1em;color:#8397a9;font-weight:700}
 .compare-slot-inputs{display:grid;grid-template-columns:1fr;gap:6px;min-width:0}
 .compare-slot-inputs select,.compare-slot-inputs input{height:36px;background:#142231;border:1px solid #2d4257;border-radius:7px;padding:0 10px;color:#e7eff6;font-size:12px;width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.compare-slot-inputs select,.compare-slot-inputs input[type="date"]{color-scheme:dark}
 .compare-slot .site-select-display{min-height:34px;font-size:12px;padding:6px 10px}
 .comparison-table.three-cols .table-head,.comparison-table.three-cols .table-row{grid-template-columns:1.2fr repeat(3,minmax(0,1fr))}
 .head-date{display:block;font-size:10px;font-weight:400;color:#8fa3b5;font-family:monospace;margin-top:2px}
@@ -491,6 +492,7 @@
 [data-theme="light"] .tour-dots button{background:#ffffff;border-color:#cbd5e1;color:#334155}
 [data-theme="light"] .tour-dots button.active{background:#b45309;border-color:#b45309;color:#ffffff}
 [data-theme="light"] .compare-slot-inputs select,[data-theme="light"] .compare-slot-inputs input{background:#ffffff;border-color:#cbd5e1;color:#0f172a}
+[data-theme="light"] .compare-slot-inputs select,[data-theme="light"] .compare-slot-inputs input[type="date"]{color-scheme:light}
 .footprint-panel { display: grid; gap: 1rem; }
 .footprint-control { display: grid; gap: .45rem; max-width: 28rem; }
 .footprint-control input { width: 100%; }

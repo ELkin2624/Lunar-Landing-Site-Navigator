@@ -941,11 +941,6 @@ export default function App() {
     fetchDataAvailability(controller.signal).then(setDataAvailability).catch(() => setDataAvailability(null))
     return () => controller.abort()
   }, [started, retry])
-  useEffect(() => {
-    if (compareId === site.id && compareDateB === date) {
-      setCompareId(SITES.find(s => s.id !== site.id)!.id)
-    }
-  }, [compareId, compareDateB, date, site.id])
   const m = useMemo(() => metrics(scenario), [scenario])
   const status = verdict(m, minSun, minEarth, maxBlackout)
   const [comparedState, setCompared] = useState<Scenario>(() => emptyScenario(SITES[1], initialDate))
@@ -1175,7 +1170,7 @@ export default function App() {
       </header>
       <main className="content">
         {dataAvailability && !dataAvailability.analysisReady && <div className="data-availability-alert" role="alert">Faltan los datos del relieve lunar. El análisis de obstáculos no está disponible en este momento.</div>}
-        {calendarOpen ? <IlluminationCalendarView site={site}/> : detailOpen ? <MissionDetailView key={`${(detailScenario ?? scenario).site.id}-${(detailScenario ?? scenario).start}`} scenario={detailScenario ?? (ready ? scenario : null)} hasComparison={Boolean(missionResults)} onCompare={() => { setDetailOpen(false); if (missionResults) setResultsOpen(true); else setPlanningOpen(true); window.scrollTo(0, 0) }} onPlan={() => { setDetailOpen(false); setPlanningOpen(true); window.scrollTo(0, 0) }}/> : resultsOpen ? <MissionResultsView result={missionResults} onEdit={() => { setResultsOpen(false); setPlanningOpen(true); window.scrollTo(0, 0) }} onDetail={id => { const chosen = missionResults?.scenarios.find(candidate => candidate.site.id === id); if (chosen) { setDetailScenario(chosen); setResultsOpen(false); setDetailOpen(true); window.scrollTo(0, 0) } }}/> : planningOpen ? <MissionPlanningView sites={SITES} initialDate={date} initialResult={missionResults} onCompared={result => { setMissionResults(result); setDetailScenario(null); setPlanningOpen(false); setResultsOpen(true); window.scrollTo(0, 0) }}/> : overviewLoading && !scenario.samples.length ? <div className="overview-loading-placeholder" role="status" aria-label={`Calculando ${site.name}`}/> : <>
+        {calendarOpen ? <IlluminationCalendarView site={site} onPick={pickCoordinate}/> : detailOpen ? <MissionDetailView key={`${(detailScenario ?? scenario).site.id}-${(detailScenario ?? scenario).start}`} scenario={detailScenario ?? (ready ? scenario : null)} hasComparison={Boolean(missionResults)} onCompare={() => { setDetailOpen(false); if (missionResults) setResultsOpen(true); else setPlanningOpen(true); window.scrollTo(0, 0) }} onPlan={() => { setDetailOpen(false); setPlanningOpen(true); window.scrollTo(0, 0) }}/> : resultsOpen ? <MissionResultsView result={missionResults} onEdit={() => { setResultsOpen(false); setPlanningOpen(true); window.scrollTo(0, 0) }} onDetail={id => { const chosen = missionResults?.scenarios.find(candidate => candidate.site.id === id); if (chosen) { setDetailScenario(chosen); setResultsOpen(false); setDetailOpen(true); window.scrollTo(0, 0) } }}/> : planningOpen ? <MissionPlanningView sites={SITES} initialDate={date} initialResult={missionResults} onCompared={result => { setMissionResults(result); setDetailScenario(null); setPlanningOpen(false); setResultsOpen(true); window.scrollTo(0, 0) }}/> : overviewLoading && !scenario.samples.length ? <div className="overview-loading-placeholder" role="status" aria-label={`Calculando ${site.name}`}/> : <>
         <div className="page-heading">
           <div>
             <div className="eyebrow"><span/> LUNAR SOUTH POLE / MISSION PLANNING CONSOLE</div>
@@ -1276,13 +1271,19 @@ export default function App() {
               </div>
               <div className={`comparison-selectors ${compareCEnabled ? 'three-cols' : ''}`}>
                 <div className="compare-slot">
-                  <label>CANDIDATO A · {date}</label>
-                  <div className="site-select-display"><MapPin size={16}/>{site.name}</div>
+                  <label htmlFor="compare-site-a">CANDIDATO A</label>
+                  <div className="compare-slot-inputs">
+                    <select id="compare-site-a" value={site.id} onChange={e => { const candidate = e.target.value === 'custom' ? customSite : SITES.find(s => s.id === e.target.value); if (candidate) { setLoading(true); setApiError(null); setSite(candidate) } }}>
+                      {customSite && <option value="custom">Punto personalizado</option>}
+                      {SITES.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                    </select>
+                    <input type="date" aria-label="Fecha candidato A" value={date} onChange={e => selectDate(e.target.value || date)}/>
+                  </div>
                 </div>
                 <div className="compare-slot">
                   <label htmlFor="compare-site">CANDIDATO B</label>
                   <div className="compare-slot-inputs">
-                    <select id="compare-site" value={compareId} onChange={e => setCompareId(e.target.value)}>{SITES.map(s => <option key={s.id} value={s.id} disabled={s.id === site.id && compareDateB === date}>{s.name}</option>)}</select>
+                    <select id="compare-site" value={compareId} onChange={e => setCompareId(e.target.value)}>{customSite && <option value="custom">Punto personalizado</option>}{SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
                     <input type="date" aria-label="Fecha candidato B" value={compareDateB} onChange={e => setCompareDateB(e.target.value || date)}/>
                   </div>
                 </div>
