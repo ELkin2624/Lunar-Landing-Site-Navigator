@@ -1,80 +1,99 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-const bodies = [
-  { name: 'Luna', url: '/luna/luna_lod.glb' },
-  { name: 'Tierra', url: '/tierra/tierra_lod.glb' },
-  { name: 'Sol', url: '/sol/sol_lod.glb' },
-] as const
+import { disposeModel } from './three/disposeModel'
+
+const BODY_URLS = ['/luna/luna_lod.glb', '/tierra/tierra_lod.glb', '/sol/sol_lod.glb']
+const HOLD_MS = 2400
 
 export function OrbitalLoading({ siteName }: { siteName: string }) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const activeRef = useRef(0)
-  const [active, setActive] = useState(0)
-  useEffect(() => { activeRef.current = active }, [active])
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const timer = window.setInterval(() => setActive(index => (index + 1) % bodies.length), 2600)
-    return () => window.clearInterval(timer)
-  }, [])
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
     let renderer: THREE.WebGLRenderer
-    try { renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' }) }
-    catch { return }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25))
-    renderer.setSize(170, 170)
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
+    } catch {
+      return
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
     host.appendChild(renderer.domElement)
+
     const scene = new THREE.Scene()
-    scene.add(new THREE.AmbientLight(0xffffff, 2))
-    const light = new THREE.DirectionalLight(0xffe2ad, 2)
+    scene.add(new THREE.AmbientLight(0xffffff, 1.6))
+    const light = new THREE.DirectionalLight(0xffe2ad, 2.2)
     light.position.set(3, 4, 5)
     scene.add(light)
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100)
-    camera.position.set(0, 0.1, 4)
-    let alive = true
-    let frame = 0
-    const models: Array<THREE.Object3D | null> = [null, null, null]
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const draw = () => {
-      if (!alive) return
-      models.forEach((model, index) => { if (model) { model.visible = index === activeRef.current; if (model.visible && !reduced) model.rotation.y += 0.018 } })
-      renderer.render(scene, camera)
-      if (!reduced) frame = requestAnimationFrame(draw)
+    const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100)
+    camera.position.set(0, 0.1, 4.4)
+
+    const resize = () => {
+      const size = Math.min(host.clientWidth, host.clientHeight)
+      if (!size) return
+      renderer.setSize(size, size, false)
     }
+    const observer = new ResizeObserver(resize)
+    observer.observe(host)
+    resize()
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const models: Array<THREE.Object3D | null> = BODY_URLS.map(() => null)
+    const scales = BODY_URLS.map((_, index) => (index === 0 ? 1 : 0))
+    const baseScales = BODY_URLS.map(() => 1)
+    let active = 0
+    let alive = true
+    const timer = reduced ? undefined : window.setInterval(() => { active = (active + 1) % BODY_URLS.length }, HOLD_MS)
+
     const loader = new GLTFLoader()
-    bodies.forEach((body, index) => loader.load(body.url, gltf => {
-      if (!alive) return
+    BODY_URLS.forEach((url, index) => loader.load(url, gltf => {
+      if (!alive) {
+        disposeModel(gltf.scene)
+        return
+      }
       const model = gltf.scene
       const box = new THREE.Box3().setFromObject(model)
-      const center = box.getCenter(new THREE.Vector3())
       const size = box.getSize(new THREE.Vector3())
-      model.scale.setScalar(2.2 / Math.max(size.x, size.y, size.z, 0.001))
-      model.position.copy(center).multiplyScalar(-model.scale.x)
-      model.visible = index === activeRef.current
-      models[index] = model
-      scene.add(model)
-      if (reduced) renderer.render(scene, camera)
+      baseScales[index] = 2.2 / Math.max(size.x, size.y, size.z, 0.001)
+      const pivot = new THREE.Group()
+      model.position.copy(box.getCenter(new THREE.Vector3())).multiplyScalar(-1)
+      pivot.add(model)
+      pivot.scale.setScalar(baseScales[index] * scales[index])
+      pivot.visible = scales[index] > 0.001
+      models[index] = pivot
+      scene.add(pivot)
     }, undefined, () => undefined))
-    draw()
+
+    renderer.setAnimationLoop(() => {
+      const previousGone = scales.every((scale, index) => index === active || scale < 0.03)
+      models.forEach((model, index) => {
+        const target = index === active && previousGone ? 1 : 0
+        scales[index] += (target - scales[index]) * (target ? 0.07 : 0.12)
+        if (!model) return
+        const eased = scales[index] < 0.001 ? 0 : scales[index]
+        model.visible = eased > 0
+        model.scale.setScalar(baseScales[index] * eased)
+        if (!reduced) model.rotation.y += 0.012 + (1 - eased) * 0.06
+      })
+      renderer.render(scene, camera)
+    })
+
     return () => {
       alive = false
-      cancelAnimationFrame(frame)
-      models.forEach(model => model?.traverse(object => {
-        if (object instanceof THREE.Mesh) {
-          object.geometry.dispose()
-          const materials = Array.isArray(object.material) ? object.material : [object.material]
-          materials.forEach(material => material.dispose())
-        }
-      }))
+      window.clearInterval(timer)
+      observer.disconnect()
+      renderer.setAnimationLoop(null)
+      models.forEach(model => model && disposeModel(model))
       renderer.dispose()
       renderer.domElement.remove()
     }
   }, [])
-  return <section className="panel orbital-loading" role="status" aria-live="polite">
-    <div className="orbital-loading-visual"><div ref={hostRef} className="orbital-loading-model"/><div className="orbital-loading-fallback" aria-hidden="true"/></div>
-    <div className="orbital-loading-copy"><span className="section-kicker">ANÁLISIS EN CURSO</span><h2>Calculando {siteName}</h2><p>Consultamos las posiciones del Sol y la Tierra y evaluamos el relieve lunar. El resultado aparecerá cuando responda la API.</p><div className="orbital-loading-steps" aria-hidden="true">{bodies.map((body, index) => <span key={body.name} className={active === index ? 'active' : ''}>{body.name}</span>)}</div><small>La animación no representa el avance de la consulta.</small></div>
-  </section>
+
+  return <div className="orbital-loading" role="status" aria-label={`Calculando ${siteName}`}>
+    <div ref={hostRef} className="orbital-loading-model"/>
+    <p className="orbital-loading-text" aria-hidden="true">Cargando<span>.</span><span>.</span><span>.</span></p>
+  </div>
 }

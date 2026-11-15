@@ -47,6 +47,26 @@
 .home-header strong span { color: #5e9bff; }
 .home-content { flex: 1; min-height: 0; max-width: 1680px; width: 100%; margin-inline: auto; overflow: hidden; }
 .home-content .education-view { border-radius: 0; height: 100%; }
+
+.home-warp { position: fixed; inset: 0; z-index: 50; background: #080d17; opacity: 0; pointer-events: none; }
+.home-shell.is-leaving { pointer-events: none; }
+.home-shell.is-leaving .home-warp { opacity: 1; transition: opacity .4s ease .55s; }
+.home-shell.is-leaving .home-header { opacity: 0; transform: translateY(-100%); transition: opacity .4s ease, transform .5s cubic-bezier(.4, 0, .8, .3); }
+.home-shell.is-leaving .education-hero { opacity: 0; transform: translateY(-28px); transition: opacity .4s ease, transform .5s cubic-bezier(.4, 0, .8, .3); }
+.home-shell.is-leaving .education-steps, .home-shell.is-leaving .education-source { opacity: 0; transform: translateY(28px); transition: opacity .4s ease, transform .5s cubic-bezier(.4, 0, .8, .3); }
+.home-shell.is-leaving .education-vitrine-caption { opacity: 0; transition: opacity .3s ease; }
+.home-shell.is-leaving .education-moon, .home-shell.is-leaving .education-moon-canvas { transform: translate(-50%, -50%) scale(2.8); transition: transform .95s cubic-bezier(.55, 0, .85, .3); will-change: transform; }
+.home-shell.is-leaving .education-backdrop::before { transform: scale(1.6); transition: transform .95s cubic-bezier(.55, 0, .85, .3); }
+
+.app-shell.is-entering::after { content: ''; position: fixed; inset: 0; z-index: 100; background: #080d17; pointer-events: none; animation: app-veil-out .55s ease-out .05s both; }
+.app-shell.is-entering .sidebar { animation: app-sidebar-in .65s cubic-bezier(.2, .7, .2, 1) .15s both; }
+.app-shell.is-entering .main-shell { animation: app-main-in .7s cubic-bezier(.2, .7, .2, 1) .2s both; }
+@keyframes app-veil-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes app-sidebar-in { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+@keyframes app-main-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .home-shell.is-leaving *, .app-shell.is-entering::after, .app-shell.is-entering .sidebar, .app-shell.is-entering .main-shell { transition: none !important; animation: none !important; }
+}
 @media (max-width: 900px), (max-height: 560px) {
   .home-shell { height: auto; min-height: 100vh; overflow: visible; }
   .home-content { overflow: visible; }
@@ -181,7 +201,6 @@ footer { color: var(--muted); }
 :root[data-theme='light'] .body-explorer-detail { border-left-color: var(--brand-blue); }
 :root[data-theme='light'] .explore-guide > span { color: var(--brand-blue); }
 :root[data-theme='light'] .explore-guide button strong { background: var(--brand-blue); color: white; }
-:root[data-theme='light'] .orbital-loading .section-kicker { color: #a9c6ff; }
 
 @media (max-width: 900px) {
 :root[data-theme='light'] .sidebar { overflow-y: auto; box-shadow: 12px 0 36px #13284729; }

@@ -766,6 +766,15 @@ export default function App() {
   useEffect(() => {
     if (started) pageTitle.current?.focus({ preventScroll: true })
   }, [started])
+  const [leaving, setLeaving] = useState(false)
+  const [entering, setEntering] = useState(false)
+  const leaveTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(leaveTimer.current), [])
+  useEffect(() => {
+    if (!entering || !started) return
+    const timer = window.setTimeout(() => setEntering(false), 1000)
+    return () => window.clearTimeout(timer)
+  }, [entering, started])
   const [planningOpen, setPlanningOpen] = useState(false)
   const [resultsOpen, setResultsOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -960,6 +969,7 @@ export default function App() {
   const comparisonReady = tab !== 'compare' || (comparisonReadyB && comparisonReadyC)
   const ready = primaryReady && comparisonReady
   const analysisLoading = loading || (tab === 'compare' && !comparisonReady && !compareError)
+  const overviewLoading = !calendarOpen && !detailOpen && !resultsOpen && !planningOpen && !ready && analysisLoading
   const filteredSites = SITES.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.region.toLowerCase().includes(search.toLowerCase()))
   const currentSample = scenario.samples[Math.min(hour, Math.max(0, scenario.samples.length - 1))]
   const currentHourOffset = currentSample ? (currentSample.hourOffset ?? currentSample.hour) : 0
@@ -1015,25 +1025,39 @@ export default function App() {
     window.scrollTo(0, 0)
   }
 
-  const startExploring = () => {
+  const enterExplorer = () => {
+    window.clearTimeout(leaveTimer.current)
     setTab('overview')
     setCalendarOpen(false)
     setPlanningOpen(false)
     setResultsOpen(false)
     setDetailOpen(false)
+    setLeaving(false)
     setStarted(true)
     window.scrollTo(0, 0)
   }
+  const startExploring = () => {
+    if (leaving) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      enterExplorer()
+      return
+    }
+    setLeaving(true)
+    setEntering(true)
+    // The warp cover's transitionend drives the switch; the timer is only a fallback.
+    leaveTimer.current = window.setTimeout(enterExplorer, 2000)
+  }
 
-  if (!started) return <div className="home-shell">
+  if (!started) return <div className={`home-shell ${leaving ? 'is-leaving' : ''}`}>
     <header className="home-header">
       <div className="brand-symbol" aria-hidden="true"><Moon size={20}/><span/></div>
       <strong>LUNARPATH <span>AI</span></strong>
     </header>
     <main className="home-content"><EducationView onExplore={startExploring}/></main>
+    <div className="home-warp" aria-hidden="true" onTransitionEnd={event => { if (leaving && event.propertyName === 'opacity') enterExplorer() }}/>
   </div>
 
-  return <div className="app-shell">
+  return <div className={`app-shell ${entering ? 'is-entering' : ''}`}>
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-symbol"><Moon size={22}/><span/></div><div><strong>LUNARPATH<span> AI</span></strong><small>MISSION PLANNING PLATFORM</small></div><button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Cerrar menú"><X size={20}/></button></div>
       <div className="sidebar-section-title">NAVEGACIÓN</div>
@@ -1069,7 +1093,7 @@ export default function App() {
         </div>
       </header>
       <main className="content">
-        {calendarOpen ? <IlluminationCalendarView site={site}/> : detailOpen ? <MissionDetailView key={detailScenario ? `${detailScenario.site.id}-${detailScenario.start}` : 'empty'} scenario={detailScenario} onCompare={() => { setDetailOpen(false); setResultsOpen(true) }} onPlan={() => { setDetailOpen(false); setPlanningOpen(true) }}/> : resultsOpen ? <MissionResultsView result={missionResults} onEdit={() => { setResultsOpen(false); setPlanningOpen(true) }} onDetail={id => { const chosen = missionResults?.scenarios.find(candidate => candidate.site.id === id); if (chosen) { setDetailScenario(chosen); setResultsOpen(false); setDetailOpen(true) } }}/> : planningOpen ? <MissionPlanningView sites={SITES} initialDate={date} initialResult={missionResults} onCompared={result => { setMissionResults(result); setDetailScenario(null); setPlanningOpen(false); setResultsOpen(true) }}/> : <>
+        {calendarOpen ? <IlluminationCalendarView site={site}/> : detailOpen ? <MissionDetailView key={detailScenario ? `${detailScenario.site.id}-${detailScenario.start}` : 'empty'} scenario={detailScenario} onCompare={() => { setDetailOpen(false); setResultsOpen(true) }} onPlan={() => { setDetailOpen(false); setPlanningOpen(true) }}/> : resultsOpen ? <MissionResultsView result={missionResults} onEdit={() => { setResultsOpen(false); setPlanningOpen(true) }} onDetail={id => { const chosen = missionResults?.scenarios.find(candidate => candidate.site.id === id); if (chosen) { setDetailScenario(chosen); setResultsOpen(false); setDetailOpen(true) } }}/> : planningOpen ? <MissionPlanningView sites={SITES} initialDate={date} initialResult={missionResults} onCompared={result => { setMissionResults(result); setDetailScenario(null); setPlanningOpen(false); setResultsOpen(true) }}/> : overviewLoading ? <Suspense fallback={<div className="orbital-loading" role="status" aria-label={`Calculando ${site.name}`}/>}><OrbitalLoading siteName={tab === 'compare' ? `${site.name} y otro sitio` : site.name}/></Suspense> : <>
         <div className="page-heading">
           <div>
             <div className="eyebrow"><span/> LUNAR SOUTH POLE / MISSION PLANNING CONSOLE</div>
@@ -1116,7 +1140,7 @@ export default function App() {
           </div>
         </div>}
         {noticeError && <div className="notice" role="alert"><span className="notice-icon"><Activity size={16}/></span><span><strong>{noticeError}</strong> Revisa la conexión con FastAPI o JPL Horizons.</span></div>}
-        {!ready ? analysisLoading ? <Suspense fallback={<section className="panel data-unavailable" role="status">Calculando {site.name}…</section>}><OrbitalLoading siteName={tab === 'compare' ? `${site.name} y otro sitio` : site.name}/></Suspense> : <section className="panel data-unavailable"><h2>Análisis no disponible</h2><p>{apiError || compareError || 'El mapa y las métricas aparecerán cuando responda la API.'}</p><p>{apiError?.includes('502') ? 'JPL Horizons no respondió a esta consulta. Puedes reintentarla.' : 'Backend: cd backend · .venv\\Scripts\\python -m uvicorn app.main:app --reload'}</p><button className="primary-button" onClick={() => setRetry(value => value + 1)}>Reintentar análisis</button><label>Fecha de inicio (UTC) <input type="date" value={date} onChange={e => selectDate(e.target.value || initialDate)}/></label></section> : tab === 'overview' ? <>
+        {!ready ? <section className="panel data-unavailable"><h2>Análisis no disponible</h2><p>{apiError || compareError || 'El mapa y las métricas aparecerán cuando responda la API.'}</p><p>{apiError?.includes('502') ? 'JPL Horizons no respondió a esta consulta. Puedes reintentarla.' : 'Backend: cd backend · .venv\\Scripts\\python -m uvicorn app.main:app --reload'}</p><button className="primary-button" onClick={() => setRetry(value => value + 1)}>Reintentar análisis</button><label>Fecha de inicio (UTC) <input type="date" value={date} onChange={e => selectDate(e.target.value || initialDate)}/></label></section> : tab === 'overview' ? <>
           <div className="workspace-grid">
             <section id="site-map" className="panel map-panel"><div className="panel-heading"><div><span className="section-kicker">01 / SELECCIÓN DE SITIO</span><h2>Cartografía polar georreferenciada</h2></div><span className="icon-button" title="Fotografía LROC y relieve LOLA"><Layers3 size={18}/></span></div><LunarMap site={site} onSelect={selectSite} onPick={pickCoordinate}/><div className="selected-site"><span className="selected-pin"><MapPin size={18}/></span><div><small>{site.region.toUpperCase()} · COTA {scenario.site.heightKm ?? site.heightKm ?? 0} KM</small><strong>{site.name}</strong><span>{Math.abs(site.lat).toFixed(3)}° S · {Math.abs(site.lon).toFixed(3)}° {site.lon < 0 ? 'O' : 'E'} · <a className="trek-link" href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener noreferrer" title="Abre el portal; verifica estas coordenadas con la herramienta Fly To">NASA Moon Trek ↗</a></span></div></div><CoordinateForm site={site} onPick={pickCoordinate}/></section>
             <section className="panel horizon-panel"><div className="panel-heading"><div><span className="section-kicker">02 / HORIZONTE Y OBSTÁCULOS</span><h2>Elevación local 360°</h2></div><span className="timestamp"><Clock3 size={14}/> {formatHour(date, currentHourOffset)} (H+{currentHourOffset.toFixed(1)}h)</span></div><Horizon scenario={scenario} hour={hour}/><div className="horizon-status"><span className={`status-badge ${currentSample.sunVisible ? 'good' : 'bad'}`}><Sun size={14}/>{currentSample.sunVisible ? 'Sol visible' : 'Sol oculto'}</span><span className={`status-badge ${currentSample.earthVisible ? 'good blue-badge' : 'bad'}`}><Radio size={14}/>{currentSample.earthVisible ? 'Tierra visible' : 'Tierra oculta'}</span><span className="horizon-note">Fuente: {scenario.provenance?.horizonSource}</span></div><VisibilityExplanation scenario={scenario} hour={hour}/></section>
@@ -1329,7 +1353,7 @@ export default function App() {
           </section>
         </div>}
         </>}
-        <footer><span>© 2026 LUNARPATH AI · NASA SPACE APPS CHALLENGE</span><span>{ready ? `EFEMÉRIDES JPL HORIZONS / RELIEVE ${scenario.provenance?.terrainSources.join(' + ') || 'LOLA'} / IAU2000::30120` : 'SIN RESULTADOS CIENTÍFICOS / UTC'}</span></footer>
+        {!overviewLoading && <footer><span>© 2026 LUNARPATH AI · NASA SPACE APPS CHALLENGE</span><span>{ready ? `EFEMÉRIDES JPL HORIZONS / RELIEVE ${scenario.provenance?.terrainSources.join(' + ') || 'LOLA'} / IAU2000::30120` : 'SIN RESULTADOS CIENTÍFICOS / UTC'}</span></footer>}
       </main>
     </div>
   </div>
