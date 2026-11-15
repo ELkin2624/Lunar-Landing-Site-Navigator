@@ -123,3 +123,19 @@
 .outline-button:disabled{opacity:.45;cursor:default}
 @media(max-width:1100px){.workspace-grid{grid-template-columns:1fr}.controls-panel{grid-column:1}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.lower-grid{grid-template-columns:1fr}}
 @media(max-width:650px){.content{padding:20px 14px}.workspace-grid{display:block}.moon-map{height:320px}.polar-map{width:min(100%,320px)}.horizon-svg{height:280px}.controls-panel{display:block}.metric-card{padding:16px;min-height:130px}.metric-value{font-size:29px}.metric-label{font-size:12px}.metric-detail{font-size:10px}.terrain-3d-canvas{height:360px}.data-unavailable{padding:24px}}
+
+.orbital-loading{min-height:410px;display:flex;align-items:center;justify-content:center;gap:clamp(20px,5vw,80px);padding:44px;color:#e8f1f7;background:radial-gradient(circle at 27% 50%,#1d3a55 0%,#101c2c 35%,#0f1926 72%)}
+.orbital-loading-visual{width:210px;height:210px;flex:none;border:1px solid #567088;border-radius:50%;position:relative;display:grid;place-items:center;box-shadow:0 0 45px #3d789033,inset 0 0 30px #29496699}
+.orbital-loading-model{position:relative;z-index:1;width:170px;height:170px}
+.orbital-loading-fallback{position:absolute;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle at 35% 32%,#f3d8a0,#9f805c 50%,#384b61 78%);animation:orbit-pulse 2.6s ease-in-out infinite}
+.orbital-loading-copy{max-width:470px}.orbital-loading-copy h2{font-size:clamp(26px,3vw,40px);margin:8px 0 14px}.orbital-loading-copy p{font-size:15px;line-height:1.65;color:#c2d1de;margin:0 0 24px}.orbital-loading-copy small{display:block;margin-top:14px;color:#8096a8;font-size:11px}
+.orbital-loading-steps{display:flex;gap:9px}.orbital-loading-steps span{padding:8px 12px;border:1px solid #344b60;border-radius:20px;color:#9bb0c2;font-size:12px}.orbital-loading-steps span.active{color:#142236;background:#e5bc79;border-color:#e5bc79}
+@keyframes orbit-pulse{50%{transform:scale(1.08);opacity:.7}}
+.body-explorer{padding:4px 22px 18px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.body-explorer button{border:1px solid #344b60;background:#142537;color:#c7d8e5;border-radius:9px;padding:13px;text-align:left;cursor:pointer;display:grid;gap:5px}
+.body-explorer button.active{border-color:#e3b46d;background:#29303b;color:#fff}
+.body-explorer button strong{font-size:14px}.body-explorer button span{font-size:12px;line-height:1.4;color:#aebfcb}
+.body-explorer-detail{margin:0 22px 16px;padding:14px 16px;border-left:3px solid #e3b46d;background:#142537;color:#d2e0ea;font-size:13px;line-height:1.55}
+@media(max-width:700px){.orbital-loading{flex-direction:column;text-align:center;padding:30px 20px}.orbital-loading-steps{justify-content:center}.body-explorer{grid-template-columns:1fr}.body-explorer button{padding:10px}}
+@media(prefers-reduced-motion:reduce){.orbital-loading-fallback{animation:none}}
+.explore-guide{display:flex;align-items:center;gap:9px;margin:0 0 18px;flex-wrap:wrap}.explore-guide>span{color:#e4b975;font-size:10px;font-weight:700;letter-spacing:.13em;margin-right:6px}.explore-guide button{border:1px solid #32485c;background:#162535;color:#d4e0e9;border-radius:8px;padding:10px 13px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px}.explore-guide button:hover,.explore-guide button:focus-visible{border-color:#e4b975;color:#fff}.explore-guide button strong{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#e4b975;color:#172638}#site-map,#mission-timeline,#mission-3d{scroll-margin-top:25px}

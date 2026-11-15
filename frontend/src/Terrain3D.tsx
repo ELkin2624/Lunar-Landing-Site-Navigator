@@ -6,6 +6,7 @@ import { apiEnabled, fetchTerrainMesh, type TerrainMesh } from './api'
 import type { Sample, Site } from './data'
 
 type View = 'local' | 'globe'
+type Body = 'moon' | 'sun' | 'earth'
 
 function bodyVector(latitude: number, longitude: number): THREE.Vector3 {
   const lat = THREE.MathUtils.degToRad(latitude)
@@ -58,6 +59,7 @@ function localGeometry(mesh: TerrainMesh): THREE.BufferGeometry {
 
 export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   const [view, setView] = useState<View>(apiEnabled ? 'local' : 'globe')
+  const [focus, setFocus] = useState<Body>('moon')
   const [mesh, setMesh] = useState<TerrainMesh | null>(null)
   const [meshError, setMeshError] = useState<string | null>(null)
   const [renderError, setRenderError] = useState<string | null>(null)
@@ -66,6 +68,8 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   const sunRef = useRef<THREE.Object3D | null>(null)
   const earthRef = useRef<THREE.Object3D | null>(null)
   const drawRef = useRef<(() => void) | null>(null)
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
+  const controlsRef = useRef<OrbitControls | null>(null)
 
   useEffect(() => {
     setMesh(null)
@@ -100,12 +104,15 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
     let frame = 0
     const draw = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; renderer.render(scene, camera) }) }
     drawRef.current = draw
+    cameraRef.current = camera
+    controlsRef.current = controls
     controls.addEventListener('change', draw)
     let disposed = false
     let local: THREE.BufferGeometry | null = null
     let localMaterial: THREE.Material | null = null
     let texture: THREE.Texture | null = null
     const loadedModels: THREE.Object3D[] = []
+    const bodyModels: Partial<Record<Body, THREE.Object3D>> = {}
     if (view === 'local' && mesh) {
       local = localGeometry(mesh)
       texture = new THREE.TextureLoader().load('/lroc_wac_south_pole.png', draw)
@@ -127,6 +134,7 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
         if (disposed) return
         scene.add(gltf.scene)
         loadedModels.push(gltf.scene)
+        bodyModels.moon = gltf.scene
         draw()
       }, undefined, () => { if (!disposed) setRenderError('No se pudo cargar el modelo GLB del equipo.') })
       const loadBody = (url: string, size: number, body: 'sun' | 'earth') => {
@@ -141,12 +149,27 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
           loadedModels.push(object)
           if (body === 'sun') sunRef.current = object
           else earthRef.current = object
+          bodyModels[body] = object
           draw()
         }, undefined, () => { if (!disposed) setRenderError(`No se pudo cargar el modelo de ${body === 'sun' ? 'Sol' : 'Tierra'}.`) })
       }
       loadBody('/sol/sol_cientifico.glb', 0.55, 'sun')
       loadBody('/tierra/tierra_cientifica.glb', 0.4, 'earth')
     }
+    let pointerStart: [number, number] | null = null
+    const onPointerDown = (event: PointerEvent) => { pointerStart = [event.clientX, event.clientY] }
+    const onPointerUp = (event: PointerEvent) => {
+      if (view !== 'globe' || !pointerStart || Math.hypot(event.clientX - pointerStart[0], event.clientY - pointerStart[1]) > 5) return
+      const rect = renderer.domElement.getBoundingClientRect()
+      const pointer = new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -((event.clientY - rect.top) / rect.height * 2 - 1))
+      const raycaster = new THREE.Raycaster()
+      raycaster.setFromCamera(pointer, camera)
+      for (const body of ['moon', 'sun', 'earth'] as const) {
+        if (bodyModels[body] && raycaster.intersectObject(bodyModels[body], true).length) { setFocus(body); break }
+      }
+    }
+    renderer.domElement.addEventListener('pointerdown', onPointerDown)
+    renderer.domElement.addEventListener('pointerup', onPointerUp)
     controls.update()
     const resize = () => {
       const width = Math.max(250, host.clientWidth)
@@ -165,6 +188,8 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
       observer.disconnect()
       controls.removeEventListener('change', draw)
       controls.dispose()
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown)
+      renderer.domElement.removeEventListener('pointerup', onPointerUp)
       local?.dispose()
       localMaterial?.dispose()
       texture?.dispose()
@@ -179,6 +204,8 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
       sunRef.current = null
       earthRef.current = null
       drawRef.current = null
+      cameraRef.current = null
+      controlsRef.current = null
       renderer.dispose()
       renderer.domElement.remove()
     }
@@ -195,13 +222,45 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
     drawRef.current?.()
   }, [site, sample, view, mesh])
 
-  return <section className="panel terrain-3d-panel">
+  useEffect(() => {
+    if (view !== 'globe' || !cameraRef.current || !controlsRef.current) return
+    const camera = cameraRef.current
+    const controls = controlsRef.current
+    const target = focus === 'moon' ? bodyVector(site.lat, site.lon).multiplyScalar(0.9)
+      : focus === 'sun' ? sunRef.current?.position.clone() : earthRef.current?.position.clone()
+    if (!target) return
+    const distance = focus === 'moon' ? 2.1 : 1.35
+    const destination = target.clone().add(new THREE.Vector3(distance * 0.7, distance * 0.45, distance))
+    const fromCamera = camera.position.clone()
+    const fromTarget = controls.target.clone()
+    let frame = 0
+    const started = performance.now()
+    const animate = (now: number) => {
+      const t = Math.min(1, (now - started) / 360)
+      const eased = 1 - (1 - t) ** 3
+      camera.position.copy(fromCamera).lerp(destination, eased)
+      controls.target.copy(fromTarget).lerp(target, eased)
+      controls.update()
+      drawRef.current?.()
+      if (t < 1) frame = requestAnimationFrame(animate)
+    }
+    frame = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(frame)
+  }, [focus, view, site, sample, mesh])
+
+  return <section id="mission-3d" className="panel terrain-3d-panel">
     <div className="panel-heading"><div><span className="section-kicker">07 / EXPLORACIÓN ESPACIAL</span><h2>Relieve 3D y cuerpos celestes</h2></div><div className="terrain-view-toggle" role="group" aria-label="Vista tridimensional"><button className={view === 'local' ? 'active' : ''} onClick={() => setView('local')}>Terreno LOLA</button><button className={view === 'globe' ? 'active' : ''} onClick={() => setView('globe')}>Luna, Sol y Tierra</button></div></div>
     <div className="terrain-3d-status"><span>Resultado calculado: Sol {sample.sunVisible ? 'visible' : 'oculto'}</span><span>Tierra {sample.earthVisible ? 'visible' : 'oculta'}</span><span>La imagen 3D ilustra la geometría; no calcula estas ventanas.</span></div>
+    {view === 'globe' && <><div className="body-explorer" role="group" aria-label="Explorar cuerpos celestes">
+      <button className={focus === 'moon' ? 'active' : ''} onClick={() => setFocus('moon')}><strong>Luna · sitio</strong><span>Enfocar {site.name}</span></button>
+      <button className={focus === 'sun' ? 'active' : ''} onClick={() => setFocus('sun')}><strong>Sol · energía</strong><span>{sample.sunVisible ? 'Visible' : 'Oculto'} · {sample.sunElevation.toFixed(1)}°</span></button>
+      <button className={focus === 'earth' ? 'active' : ''} onClick={() => setFocus('earth')}><strong>Tierra · enlace</strong><span>{sample.earthVisible ? 'Directo' : 'Bloqueado'} · {sample.earthElevation.toFixed(1)}°</span></button>
+    </div><p className="body-explorer-detail">{focus === 'moon' ? `${site.name}: ${Math.abs(site.lat).toFixed(3)}° S, ${site.lon.toFixed(3)}° E. El marcador indica la ubicación evaluada.` : focus === 'sun' ? `Sol a ${sample.sunElevation.toFixed(1)}°; horizonte local a ${sample.horizonSun.toFixed(1)}°. ${sample.sunVisible ? 'La línea de vista solar está libre en esta muestra.' : 'El relieve bloquea la línea de vista solar en esta muestra.'}` : `Tierra a ${sample.earthElevation.toFixed(1)}°; horizonte local a ${sample.horizonEarth.toFixed(1)}°. ${sample.earthVisible ? 'Hay línea de vista directa en esta muestra.' : 'No hay línea de vista directa en esta muestra.'}`}</p></>}
     {view === 'local' && mesh?.gridSpacingM === 20 && <p className="terrain-3d-caution">Hay relieve local a 20 m/píxel. Las métricas de luz y comunicación aún usan un horizonte regional de 240 m/píxel; pueden cambiar al incorporar obstáculos cercanos.</p>}
     {view === 'local' && (meshError || !apiEnabled) ? <p className="terrain-3d-message">{meshError || 'Activa el backend y descarga el DEM LOLA para ver el terreno local.'}</p> : view === 'local' && !mesh ? <p className="terrain-3d-message">Cargando malla LOLA del sitio…</p> : null}
     <div ref={hostRef} className="terrain-3d-canvas" style={{ display: view === 'local' && !mesh ? 'none' : undefined }}/>
     {renderError && <p className="terrain-3d-message" role="alert">{renderError}</p>}
     <p className="terrain-3d-note">{view === 'local' ? `Malla ${mesh?.source ?? 'LOLA'} · ${mesh?.spanM ?? '…'} m de ancho · relieve vertical ×3 · textura WAC estática de 480 m/píxel.` : 'Modelos Blender de Luna, Sol y Tierra · direcciones aparentes desde Horizons; tamaños y distancias fuera de escala.'} La luz sigue el Sol de Horizons; el sombreado 3D es visual y no representa las sombras calculadas por el análisis de visibilidad.</p>
+    <p className="terrain-3d-note">También puedes <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener noreferrer">explorar el globo 3D oficial en NASA Moon Trek ↗</a>. En el portal elige «3D Globe»; el enlace no conserva automáticamente este sitio ni la hora.</p>
   </section>
 }

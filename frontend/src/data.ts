@@ -7,8 +7,6 @@ export type Metrics = { sunPercent: number; earthPercent: number; concurrentPerc
 
 // Mouton, Malapert y Haworth usan el centro oficial del IAU Gazetteer; de Gerlache Rim 2 es aproximado.
 // No son ubicaciones de aterrizaje validadas.
-// Mouton, Malapert y Haworth usan el centro oficial del IAU Gazetteer; de Gerlache Rim 2 es aproximado.
-// No son ubicaciones de aterrizaje validadas.
 export const SITES: Site[] = [
   { id: 'mouton', name: 'Mons Mouton', region: 'Región Artemis III', lat: -84.6, lon: 31.0, note: 'Macizo elevado, próximo al polo sur' },
   { id: 'malapert', name: 'Mons Malapert', region: 'Región Artemis III', lat: -85.98, lon: -1.67, note: 'Relieve alto y horizonte complejo' },
