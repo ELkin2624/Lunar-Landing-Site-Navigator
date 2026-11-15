@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { apiEnabled, fetchNacTexture, fetchTerrainMesh, type TerrainMesh } from './api'
 import type { Sample, Site } from './data'
+import { disposeModel } from './three/disposeModel'
 import { bodyVector, globeDirection } from './three/lunarFrame'
 
 type View = 'local' | 'globe'
@@ -111,13 +112,21 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
     setTextureInfo(null)
     setTextureError(null)
     if (!mesh || view !== 'local') return
+    if (site.lat > -85.5) {
+      setTextureError(`Aviso de cobertura NASA: Este sitio está a ${Math.abs(site.lat).toFixed(1)}° S, fuera del mosaico polar fotográfico de alta resolución LRO NAC (disponible entre 85.5° S y 90° S). Se proyecta la malla real LOLA con fotografía regional WAC.`)
+      return
+    }
     const controller = new AbortController()
     let objectUrl: string | null = null
     fetchNacTexture(site, mesh.spanM, controller.signal).then(info => {
       if (controller.signal.aborted) { URL.revokeObjectURL(info.url); return }
       objectUrl = info.url
       setTextureInfo(info)
-    }).catch(error => { if (!controller.signal.aborted) setTextureError(String(error)) })
+    }).catch(() => {
+      if (!controller.signal.aborted) {
+        setTextureError('Aviso de cobertura: La fotografía de detalle LRO NAC (1 m/px) no tiene cobertura en este sector o el archivo GeoTIFF no está descargado localmente. Se usa la imagen regional WAC sobre el relieve LOLA.')
+      }
+    })
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [mesh, site, view])
 
@@ -263,13 +272,7 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
       local?.dispose()
       localMaterial?.dispose()
       texture?.dispose()
-      for (const model of loadedModels) model.traverse(object => {
-        if (object instanceof THREE.Mesh) {
-          object.geometry.dispose()
-          const materials = Array.isArray(object.material) ? object.material : [object.material]
-          materials.forEach(material => material.dispose())
-        }
-      })
+      for (const model of loadedModels) disposeModel(model)
       lightRef.current = null
       sunRef.current = null
       earthRef.current = null
@@ -331,6 +334,7 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
       <button className={focus === 'earth' ? 'active' : ''} onClick={() => setFocus('earth')}><strong>Tierra · enlace</strong><span>{sample.earthVisible ? 'Directo' : 'Bloqueado'} · {sample.earthElevation.toFixed(1)}°</span></button>
     </div><p className="body-explorer-detail">{focus === 'moon' ? `${site.name}: ${Math.abs(site.lat).toFixed(3)}° S, ${site.lon.toFixed(3)}° E. El marcador indica la ubicación evaluada.` : focus === 'sun' ? `Sol a ${sample.sunElevation.toFixed(1)}°; horizonte local a ${sample.horizonSun.toFixed(1)}°. ${sample.sunVisible ? 'La línea de vista solar está libre en esta muestra.' : 'El relieve bloquea la línea de vista solar en esta muestra.'}` : `Tierra a ${sample.earthElevation.toFixed(1)}°; horizonte local a ${sample.horizonEarth.toFixed(1)}°. ${sample.earthVisible ? 'Hay línea de vista directa en esta muestra.' : 'No hay línea de vista directa en esta muestra.'}`}</p></>}
     {view === 'local' && mesh?.gridSpacingM === 20 && <p className="terrain-3d-caution">Malla local de alta resolución (20 m/píxel). El horizonte de visibilidad combina LOLA 20 m en los primeros 5 km y 240 m hasta 250 km.</p>}
+    {view === 'local' && textureError && <p className="terrain-3d-caution" role="status">{textureError}</p>}
     {view === 'local' && (meshError || !apiEnabled) ? <p className="terrain-3d-message">{meshError || 'Activa el backend y descarga el DEM LOLA para ver el terreno local.'}</p> : view === 'local' && !mesh ? <p className="terrain-3d-message">Cargando malla LOLA del sitio…</p> : null}
     <div ref={hostRef} className="terrain-3d-canvas" style={{ display: view === 'local' && !mesh ? 'none' : undefined }}/>
     {renderError && <p className="terrain-3d-message" role="alert">{renderError}</p>}

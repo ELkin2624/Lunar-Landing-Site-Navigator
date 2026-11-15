@@ -299,6 +299,8 @@
 .copilot-chat-box label{font-size:10px;font-weight:700;letter-spacing:.08em;color:#8ea3b5}
 .copilot-chat-answer{background:#12202f;border:1px solid #2a3e52;border-left:3px solid #6ec7a8;border-radius:7px;padding:10px 12px;display:grid;gap:4px}
 .copilot-chat-answer strong{font-size:12px;color:#8adbc0}
+.copilot-chat-answer.is-warning{background:#2a1c17;border-color:#693c2c;border-left-color:#f59e0b}
+.copilot-chat-answer.is-warning strong{color:#fbbf24}
 .copilot-chat-answer p{margin:0;font-size:12.5px;line-height:1.45;color:#dbe6ef}
 .copilot-chat-answer small{font-size:11px;color:#98aebf}
 
@@ -453,8 +455,11 @@
 [data-theme="light"] .copilot-chat-box label{color:#475569}
 [data-theme="light"] .copilot-chat-answer{background:#f0fdf4;border-color:#bbf7d0;border-left-color:#15803d}
 [data-theme="light"] .copilot-chat-answer strong{color:#166534}
+[data-theme="light"] .copilot-chat-answer.is-warning{background:#fffbeb;border-color:#fde68a;border-left-color:#d97706}
+[data-theme="light"] .copilot-chat-answer.is-warning strong{color:#b45309}
 [data-theme="light"] .copilot-chat-answer p{color:#1e293b}
 [data-theme="light"] .copilot-chat-answer small{color:#475569}
+[data-theme="light"] .terrain-3d-caution{background:#fffbeb;border-color:#fcd34d;color:#92400e}
 
 /* Guided Demo & Multi-Date / 3-Site Compare */
 .outline-button.active-tour{border-color:#e2b77a;color:#f3cb8f;background:rgba(226,183,122,.1)}

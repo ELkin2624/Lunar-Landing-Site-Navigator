@@ -671,7 +671,7 @@ function MissionOperationsDeck({
             <button type="button" onClick={() => handleAskSubmit('¿Hay riesgo térmico o de sombra parcial?')}>Energía / disco parcial</button>
           </div>
           {chatError && <small className="nl-feedback txt-crit">{chatError}</small>}
-          {chatAnswer && <div className="copilot-chat-answer" role="status">
+          {chatAnswer && <div className={`copilot-chat-answer${chatAnswer.verdict.includes('NO CONFORME') ? ' is-warning' : ''}`} role="status">
             <strong>{chatAnswer.verdict}</strong>
             <p>{chatAnswer.directAnswer || chatAnswer.scientificExplanation}</p>
             {chatAnswer.suggestedActions.length > 0 && <small>Acción sugerida: {chatAnswer.suggestedActions[0]}</small>}

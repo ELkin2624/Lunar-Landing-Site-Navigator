@@ -83,6 +83,7 @@
 [data-theme='light'] .guided-date input { color: #233c59; }
 [data-theme='light'] .guided-hint, [data-theme='light'] .guided-config fieldset p { color: #718198; }
 [data-theme='light'] .guided-durations button { background: #edf3fc; color: #41566f; }
+[data-theme='light'] .guided-durations button.selected { background: var(--brand-blue); color: #ffffff; font-weight: 700; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25); }
 [data-theme='light'] .guided-priorities label { border-color: #e2e9f3; }
 [data-theme='light'] .guided-priorities label.selected { background: #edf4ff; border-color: #97b7ec; }
 [data-theme='light'] .guided-priorities small { color: #6d7e94; }

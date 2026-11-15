@@ -134,7 +134,27 @@ def diagnose_scenario(result: ScenarioResult, user_query: str | None = None) -> 
     if user_query:
         q = user_query.lower()
         sources_txt = ", ".join(result.terrain_sources) if result.terrain_sources else result.horizon_source
-        if "batería" in q or "bateria" in q or "energía" in q or "energia" in q:
+        if (
+            "significa" in q
+            or "explica" in q
+            or "interpretar" in q
+            or "resumen" in q
+            or "estos datos" in q
+            or "qué es" in q
+            or "que es" in q
+        ):
+            status_explain = (
+                "cumple todos los umbrales operativos configurados"
+                if all_passed
+                else "viola al menos un umbral operativo (por ejemplo, baja disponibilidad solar o noche demasiado larga para la batería)"
+            )
+            direct_answer = (
+                f"En '{site_label}' ({total_h:.0f} h evaluadas), el sitio {status_explain}: "
+                f"tiene {sun_pct}% de luz solar (noche continua máx. de {m.longest_darkness_hours} h para dimensionar baterías), "
+                f"{earth_pct}% de visibilidad directa con la Tierra (blackout máx. de {m.longest_earth_blackout_hours} h sin antena directa) "
+                f"y {conc_pct}% de simultaneidad Sol+Tierra (ventanas ideales para actividades EVA y descarga científica con energía solar)."
+            )
+        elif "batería" in q or "bateria" in q or "energía" in q or "energia" in q:
             direct_answer = (
                 f"Para este escenario en '{site_label}', la batería debe alimentar la carga vital durante al menos "
                 f"{m.longest_darkness_hours} horas consecutivas de oscuridad. La generación solar cubre el {sun_pct}% del tiempo "
