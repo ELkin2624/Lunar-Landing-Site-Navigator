@@ -131,9 +131,16 @@ def regional_slope(dem: LolaDem, site: Site, *, baseline_pixels: int = 1, neighb
         status = "not_evaluated"
     else:
         status = "above_user_threshold" if slope > threshold_deg else "at_or_below_user_threshold"
+    scale_int = int(round(dem.scale_m))
     return SlopeResult(site=site, site_height_m=dem.pixel_height_m(row, col), cell_row=row, cell_col=col,
                        pixel_scale_m=dem.scale_m, ground_spacing_m=round(spacing, 2),
                        baseline_pixels=baseline_pixels, baseline_m=round(baseline_pixels * spacing, 1),
                        slope_deg=round(slope, 2), aspect_deg=None if aspect is None else round(aspect, 1),
                        multiscale=multiscale, neighborhood=neighborhood,
-                       threshold_deg=threshold_deg, threshold_status=status)
+                       threshold_deg=threshold_deg, threshold_status=status,
+                       source=f"LOLA_{dem.product_id}_PDS",
+                       note=(
+                           f"Regional preliminary slope from a {scale_int} m/pixel DEM. It does not resolve craters, boulders or slopes at "
+                           "lander-footprint scale, and the value depends on the baseline. The threshold is user-defined; vehicle "
+                           "limits depend on the lander and on how slope is measured. This is not a landing-safety assessment."
+                       ))

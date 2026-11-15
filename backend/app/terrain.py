@@ -112,27 +112,111 @@ def _destination(latitude_deg: float, longitude_deg: float, azimuth_deg: float, 
 
 
 def horizon_profile(dem: LolaDem, site: Site, *, observer_height_m: float = 2.0,
-                    max_distance_km: float = 250, azimuth_step_deg: int = 1) -> tuple[list[HorizonPoint], float]:
+                    max_distance_km: float = 250, azimuth_step_deg: int = 1,
+                    fine_dem: LolaDem | None = None, fine_distance_km: float = 5) -> tuple[list[HorizonPoint], float]:
     if not 0 <= observer_height_m <= 100:
         raise ValueError("observer_height_m must be between 0 and 100")
     # Massifs 100-200 km away still rise above the 1-2° polar solar path.
     if not 1 <= max_distance_km <= 300 or azimuth_step_deg not in (1, 2, 5, 10):
         raise ValueError("Unsupported ray distance or azimuth step")
-    site_height = dem.height_m(site.latitude_deg, site.longitude_deg)
+    use_fine = False
+    if fine_dem is not None:
+        try:
+            site_height = fine_dem.height_m(site.latitude_deg, site.longitude_deg)
+            use_fine = True
+        except TerrainError:
+            site_height = dem.height_m(site.latitude_deg, site.longitude_deg)
+    else:
+        site_height = dem.height_m(site.latitude_deg, site.longitude_deg)
     origin_radius = dem.radius_m + site_height + observer_height_m
     profile = []
     # Half-pixel spacing avoids skipping a narrow ridge in a 240 m grid.
     distance_step = dem.scale_m / 2
-    steps = math.ceil(max_distance_km * 1000 / distance_step)
+    maximum_m = max_distance_km * 1000
+    near_limit_m = min(maximum_m, fine_distance_km * 1000) if use_fine else 0
     for azimuth in range(0, 360, azimuth_step_deg):
         skyline = -90.0
-        for index in range(1, steps + 1):
-            distance = min(index * distance_step, max_distance_km * 1000)
+        obstacle_distance = None
+        obstacle_dem = None
+        distances = []
+        if near_limit_m:
+            fine_step = fine_dem.scale_m / 2
+            distances.extend(min(index * fine_step, near_limit_m)
+                             for index in range(1, math.ceil(near_limit_m / fine_step) + 1))
+        distances.extend(min(near_limit_m + index * distance_step, maximum_m)
+                         for index in range(1, math.ceil((maximum_m - near_limit_m) / distance_step) + 1))
+        for distance in distances:
             lat, lon = _destination(site.latitude_deg, site.longitude_deg, azimuth, distance)
-            terrain_radius = dem.radius_m + dem.height_m(lat, lon)
+            source_dem = dem
+            if distance <= near_limit_m and fine_dem is not None:
+                try:
+                    height_m = fine_dem.height_m(lat, lon)
+                    source_dem = fine_dem
+                except TerrainError:
+                    height_m = dem.height_m(lat, lon)
+            else:
+                height_m = dem.height_m(lat, lon)
+            terrain_radius = dem.radius_m + height_m
             arc = distance / dem.radius_m
             angle = math.degrees(math.atan2(terrain_radius * math.cos(arc) - origin_radius,
                                             terrain_radius * math.sin(arc)))
-            skyline = max(skyline, angle)
-        profile.append(HorizonPoint(azimuth_deg=azimuth, elevation_deg=skyline))
+            if angle > skyline:
+                skyline = angle
+                obstacle_distance = distance / 1000
+                obstacle_dem = source_dem
+        profile.append(HorizonPoint(azimuth_deg=azimuth, elevation_deg=skyline,
+                                    obstacle_distance_km=obstacle_distance,
+                                    obstacle_source=obstacle_dem.product_id if obstacle_dem else None,
+                                    obstacle_pixel_scale_m=obstacle_dem.scale_m if obstacle_dem else None))
     return profile, (site_height + observer_height_m) / 1000
+
+
+# Empirical 1-sigma vertical RMSE vs 2 m LROC NAC stereo DTMs (VALIDACION_STEREO_NAC.json)
+LOLA_20M_VERTICAL_SIGMA_M = 2.7
+LOLA_240M_VERTICAL_SIGMA_M = 18.0
+
+
+def dem_error_envelopes(
+    profile: list[HorizonPoint],
+    *,
+    uses_fine_site: bool = False,
+    dem_vertical_error_m: float | None = None,
+    sigma_multiplier: float = 3.0,
+) -> tuple[list[HorizonPoint], list[HorizonPoint], dict]:
+    """Propagate 1-sigma DEM vertical uncertainty to upper/lower skyline error envelopes."""
+    obs_sigma = (
+        dem_vertical_error_m
+        if dem_vertical_error_m is not None
+        else (LOLA_20M_VERTICAL_SIGMA_M if uses_fine_site else LOLA_240M_VERTICAL_SIGMA_M)
+    )
+    upper: list[HorizonPoint] = []
+    lower: list[HorizonPoint] = []
+    sigma_angles_deg: list[float] = []
+    for p in profile:
+        is_fine = p.obstacle_pixel_scale_m == 20
+        ter_sigma = (
+            dem_vertical_error_m
+            if dem_vertical_error_m is not None
+            else (LOLA_20M_VERTICAL_SIGMA_M if is_fine else LOLA_240M_VERTICAL_SIGMA_M)
+        )
+        dist_m = max(20.0, (p.obstacle_distance_km or 5.0) * 1000.0)
+        # Spatial correlation (Gaussian variogram) prevents unphysical angular blow-up on adjacent cells.
+        corr_len_m = 400.0 if (uses_fine_site and is_fine) else 1500.0
+        rho = math.exp(-((dist_m / corr_len_m) ** 2))
+        sigma_diff_m = math.sqrt(max(0.0, obs_sigma ** 2 + ter_sigma ** 2 - 2.0 * rho * obs_sigma * ter_sigma))
+        sigma_ang = math.degrees(math.atan2(sigma_diff_m, dist_m))
+        sigma_angles_deg.append(sigma_ang)
+        delta = sigma_multiplier * sigma_ang
+        upper.append(p.model_copy(update={"elevation_deg": min(90.0, p.elevation_deg + delta)}))
+        lower.append(p.model_copy(update={"elevation_deg": max(-90.0, p.elevation_deg - delta)}))
+
+    sorted_s = sorted(sigma_angles_deg)
+    median_sigma = sorted_s[len(sorted_s) // 2] if sorted_s else 0.0
+    max_sigma = max(sorted_s) if sorted_s else 0.0
+    return upper, lower, {
+        "dem_vertical_sigma_m": round(obs_sigma, 2),
+        "landing_dispersion_sigma": round(sigma_multiplier, 2),
+        "horizon_elevation_sigma_deg": round(median_sigma, 4),
+        "horizon_envelope_deg": round(sigma_multiplier * median_sigma, 4),
+        "max_horizon_envelope_deg": round(sigma_multiplier * max_sigma, 4),
+    }

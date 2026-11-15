@@ -3,9 +3,9 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 const bodies = [
-  { name: 'Luna', url: '/luna/luna_cientifica.glb' },
-  { name: 'Tierra', url: '/tierra/tierra_cientifica.glb' },
-  { name: 'Sol', url: '/sol/sol_cientifico.glb' },
+  { name: 'Luna', url: '/luna/luna_lod.glb' },
+  { name: 'Tierra', url: '/tierra/tierra_lod.glb' },
+  { name: 'Sol', url: '/sol/sol_lod.glb' },
 ] as const
 
 export function OrbitalLoading({ siteName }: { siteName: string }) {

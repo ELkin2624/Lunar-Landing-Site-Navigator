@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 import csv
 from datetime import timedelta
@@ -9,6 +10,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from .analysis import analyze, apply_refined_events, build_timeline, position
@@ -18,6 +20,7 @@ from .copilot import CopilotRequest, CopilotResponse, diagnose_scenario, parse_n
 from .delta import MissionDeltaRequest, MissionDeltaResult, compute_mission_delta, shift_lunar_coordinates
 from .horizons import HorizonsClient, HorizonsError
 from .mesh import MeshRequest, MeshResult, terrain_mesh
+from .nac_texture import build_texture_with_meta
 from .models import (
     CompareRequest,
     Constraints,
@@ -37,7 +40,7 @@ from .models import (
 from .power import PowerSimulationRequest, PowerSimulationResult, simulate_power
 from .ranking import RankRequest, RankingResponse, rank_scenarios
 from .slope import SlopeRequest, SlopeResult, regional_slope
-from .terrain import LolaDem, TerrainError, horizon_profile
+from .terrain import LolaDem, TerrainError, _destination, dem_error_envelopes, horizon_profile
 from .transitions import effective_step_minutes
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -134,6 +137,29 @@ def get_terrain_mesh(payload: MeshRequest, request: Request) -> MeshResult:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.get("/api/v1/terrain/nac-texture", tags=["Terrain"])
+async def get_nac_texture(
+    latitude_deg: float = Query(ge=-90, le=-75),
+    longitude_deg: float = Query(ge=-180, le=180),
+    span_m: int = Query(default=2000, ge=2000, le=9600),
+) -> Response:
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            png, pixel_m, coverage, cache_hits, total_tiles = await build_texture_with_meta(
+                client, latitude_deg, longitude_deg, span_m
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    cache_state = "hit" if total_tiles > 0 and cache_hits == total_tiles else ("partial" if cache_hits > 0 else "miss")
+    return Response(content=png, media_type="image/png", headers={
+        "X-Texture-Source": "Moon-Trek-LROC-NAC",
+        "X-Texture-Pixel-M": f"{pixel_m:.3f}",
+        "X-Tile-Coverage-Fraction": f"{coverage:.3f}",
+        "X-Texture-Cache": cache_state,
+        "Cache-Control": "public, max-age=86400",
+    })
+
+
 def require_dem(request: Request) -> LolaDem:
     dem = request.app.state.dem
     if dem is None:
@@ -151,10 +177,14 @@ def terrain_horizon(payload: TerrainRequest, request: Request) -> TerrainResult:
             observer_height_m=payload.observer_height_m,
             max_distance_km=payload.max_distance_km,
             azimuth_step_deg=payload.azimuth_step_deg,
+            fine_dem=request.app.state.fine_dem,
         )
     except TerrainError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return TerrainResult(site=payload.site, profile=profile, site_height_km_used=height)
+    mixed = any(point.obstacle_pixel_scale_m == 20 for point in profile)
+    return TerrainResult(site=payload.site, profile=profile, site_height_km_used=height,
+                         source="LOLA_20M_NEAR_240M_FAR" if mixed else "LOLA_LDEM_75S_240M_PDS",
+                         pixel_scale_m=20 if mixed else 240)
 
 
 @app.get("/api/v1/sites/{site_id}/horizon", response_model=TerrainResult, tags=["Terrain"])
@@ -182,25 +212,47 @@ def get_site_horizon(
             observer_height_m=observer_height_m,
             max_distance_km=max_distance_km,
             azimuth_step_deg=azimuth_step_deg,
+            fine_dem=request.app.state.fine_dem,
         )
     except TerrainError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return TerrainResult(site=site_model, profile=profile, site_height_km_used=height)
+    mixed = any(point.obstacle_pixel_scale_m == 20 for point in profile)
+    return TerrainResult(site=site_model, profile=profile, site_height_km_used=height,
+                         source="LOLA_20M_NEAR_240M_FAR" if mixed else "LOLA_LDEM_75S_240M_PDS",
+                         pixel_scale_m=20 if mixed else 240)
 
 
 @app.post("/api/v1/terrain/slope", response_model=SlopeResult, tags=["Terrain"])
-def terrain_slope(payload: SlopeRequest, request: Request) -> SlopeResult:
+async def terrain_slope(payload: SlopeRequest, request: Request) -> SlopeResult:
     dem = require_dem(request)
+    fine_dem: LolaDem | None = request.app.state.fine_dem
+    if fine_dem is not None and payload.site.latitude_deg <= -87.5:
+        try:
+            return await run_in_threadpool(
+                regional_slope,
+                fine_dem,
+                payload.site,
+                baseline_pixels=payload.baseline_pixels,
+                neighborhood_radius_m=payload.neighborhood_radius_m,
+                threshold_deg=payload.threshold_deg,
+            )
+        except TerrainError:
+            pass
     try:
-        return regional_slope(dem, payload.site, baseline_pixels=payload.baseline_pixels,
-                              neighborhood_radius_m=payload.neighborhood_radius_m,
-                              threshold_deg=payload.threshold_deg)
+        return await run_in_threadpool(
+            regional_slope,
+            dem,
+            payload.site,
+            baseline_pixels=payload.baseline_pixels,
+            neighborhood_radius_m=payload.neighborhood_radius_m,
+            threshold_deg=payload.threshold_deg,
+        )
     except (TerrainError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/sites/{site_id}/slope", response_model=SlopeResult, tags=["Terrain"])
-def get_site_slope(
+async def get_site_slope(
     site_id: str,
     request: Request,
     baseline_pixels: int = Query(default=1),
@@ -211,9 +263,9 @@ def get_site_slope(
     if site is None:
         raise HTTPException(status_code=404, detail=f"Site '{site_id}' not found in lunar catalog")
     site_model = Site(latitude_deg=site.latitude_deg, longitude_deg=site.longitude_deg, label=site.name)
-    return terrain_slope(SlopeRequest(site=site_model, baseline_pixels=baseline_pixels,
-                                      neighborhood_radius_m=neighborhood_radius_m,
-                                      threshold_deg=threshold_deg), request)
+    return await terrain_slope(SlopeRequest(site=site_model, baseline_pixels=baseline_pixels,
+                                            neighborhood_radius_m=neighborhood_radius_m,
+                                            threshold_deg=threshold_deg), request)
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +303,8 @@ async def get_ephemeris(payload: EphemerisRequest, request: Request) -> Ephemeri
 # ---------------------------------------------------------------------------
 
 
-async def evaluate(scenario: Scenario, horizons: HorizonsClient, dem: LolaDem | None = None) -> ScenarioResult:
+async def evaluate(scenario: Scenario, horizons: HorizonsClient, dem: LolaDem | None = None,
+                   fine_dem: LolaDem | None = None) -> ScenarioResult:
     try:
         effective_step = effective_step_minutes(scenario)
     except ValueError as exc:
@@ -269,11 +322,12 @@ async def evaluate(scenario: Scenario, horizons: HorizonsClient, dem: LolaDem | 
                 site,
                 observer_height_m=scenario.observer_height_m,
                 max_distance_km=scenario.max_horizon_distance_km,
+                fine_dem=fine_dem,
             )
         except TerrainError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         site = site.model_copy(update={"height_km": height_km})
-        source = "LOLA_LDEM_75S_240M_PDS"
+        source = "LOLA_20M_NEAR_240M_FAR" if any(p.obstacle_pixel_scale_m == 20 for p in profile) else "LOLA_LDEM_75S_240M_PDS"
     try:
         sun = await horizons.positions(10, site, scenario.start_utc, scenario.end_utc, effective_step)
         earth = await horizons.positions(399, site, scenario.start_utc, scenario.end_utc, effective_step)
@@ -303,7 +357,7 @@ async def evaluate(scenario: Scenario, horizons: HorizonsClient, dem: LolaDem | 
         timeline = apply_refined_events(scenario, timeline)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return ScenarioResult(
+    result = ScenarioResult(
         scenario=scenario,
         samples=samples,
         horizon_profile=profile,
@@ -311,17 +365,134 @@ async def evaluate(scenario: Scenario, horizons: HorizonsClient, dem: LolaDem | 
         timeline=timeline,
         horizon_source=source,
         site_height_km_used=site.height_km,
+        terrain_sources=sorted({p.obstacle_source for p in profile or [] if p.obstacle_source}),
+        fine_coverage_km=5 if source == "LOLA_20M_NEAR_240M_FAR" else 0,
     )
+    if scenario.spatial_uncertainty_radius_m and scenario.use_dem_horizon and dem is not None:
+        variations = [result.metrics]
+
+        async def _eval_neighbor(bearing: int):
+            latitude, longitude = _destination(
+                site.latitude_deg, site.longitude_deg, bearing, scenario.spatial_uncertainty_radius_m
+            )
+            if longitude > 180:
+                longitude -= 360
+            if longitude < -180:
+                longitude += 360
+            nearby = Site(latitude_deg=latitude, longitude_deg=longitude)
+            try:
+                nearby_profile, nearby_height_km = await run_in_threadpool(
+                    horizon_profile,
+                    dem,
+                    nearby,
+                    observer_height_m=scenario.observer_height_m,
+                    max_distance_km=scenario.max_horizon_distance_km,
+                    azimuth_step_deg=5,
+                    fine_dem=fine_dem,
+                )
+            except TerrainError:
+                return None, False
+            nearby_site = nearby.model_copy(update={"height_km": nearby_height_km})
+            recomputed = False
+            n_sun, n_earth = sun, earth
+            try:
+                n_sun_cand, n_earth_cand = await asyncio.gather(
+                    horizons.positions(10, nearby_site, scenario.start_utc, scenario.end_utc, effective_step),
+                    horizons.positions(399, nearby_site, scenario.start_utc, scenario.end_utc, effective_step),
+                )
+                if len(n_sun_cand) == len(sun) and len(n_earth_cand) == len(earth):
+                    n_sun, n_earth = n_sun_cand, n_earth_cand
+                    recomputed = True
+            except HorizonsError:
+                pass
+            nearby_samples = [
+                Sample(
+                    time_utc=s[0],
+                    sun=position(s[1], s[2], nearby_profile, is_sun=True),
+                    earth=position(
+                        e[1],
+                        e[2],
+                        nearby_profile,
+                        clearance=scenario.constraints.min_earth_elevation_deg,
+                        is_sun=False,
+                    ),
+                )
+                for s, e in zip(n_sun, n_earth)
+                if s[0] < scenario.end_utc
+            ]
+            nearby_timeline = build_timeline(scenario, nearby_samples)
+            return analyze(scenario, nearby_timeline), recomputed
+
+        neighbor_results = await asyncio.gather(*(_eval_neighbor(b) for b in (0, 90, 180, 270)))
+        recomputed_offsets = 0
+        spatial_sites = 1
+        for metrics_item, recomputed in neighbor_results:
+            if metrics_item is not None:
+                variations.append(metrics_item)
+                spatial_sites += 1
+                if recomputed:
+                    recomputed_offsets += 1
+
+        upper_prof, lower_prof, dem_stats = dem_error_envelopes(
+            profile,
+            uses_fine_site=(source == "LOLA_20M_NEAR_240M_FAR"),
+            dem_vertical_error_m=scenario.dem_vertical_error_m,
+            sigma_multiplier=scenario.landing_dispersion_sigma,
+        )
+        for env_prof in (upper_prof, lower_prof):
+            env_samples = [
+                Sample(
+                    time_utc=s[0],
+                    sun=position(s[1], s[2], env_prof, is_sun=True),
+                    earth=position(
+                        e[1],
+                        e[2],
+                        env_prof,
+                        clearance=scenario.constraints.min_earth_elevation_deg,
+                        is_sun=False,
+                    ),
+                )
+                for s, e in zip(sun, earth)
+                if s[0] < scenario.end_utc
+            ]
+            variations.append(analyze(scenario, build_timeline(scenario, env_samples)))
+
+        def bounds(field: str, multiplier: float = 1) -> list[float]:
+            values = [round(getattr(item, field) * multiplier, 3) for item in variations]
+            return [min(values), max(values)]
+
+        all_recomputed = spatial_sites > 1 and recomputed_offsets == (spatial_sites - 1)
+        result.spatial_uncertainty = {
+            "radius_m": scenario.spatial_uncertainty_radius_m,
+            "sites_evaluated": spatial_sites,
+            "ephemeris_recomputed_per_offset": all_recomputed,
+            "dem_vertical_error_m": dem_stats["dem_vertical_sigma_m"],
+            "dem_vertical_sigma_m": dem_stats["dem_vertical_sigma_m"],
+            "landing_dispersion_sigma": dem_stats["landing_dispersion_sigma"],
+            "horizon_elevation_sigma_deg": dem_stats["horizon_elevation_sigma_deg"],
+            "horizon_envelope_deg": dem_stats["horizon_envelope_deg"],
+            "sunlit_percent_range": bounds("sunlit_fraction", 100),
+            "earth_visible_percent_range": bounds("earth_visible_fraction", 100),
+            "longest_darkness_hours_range": bounds("longest_darkness_hours"),
+            "longest_earth_blackout_hours_range": bounds("longest_earth_blackout_hours"),
+            "method": (
+                f"Center + 4 cardinal offsets (±{scenario.spatial_uncertainty_radius_m:g}m, Horizons recomputed per offset) "
+                f"+ {dem_stats['landing_dispersion_sigma']:g}-sigma DEM vertical RMSE propagation ({dem_stats['dem_vertical_sigma_m']}m -> median ±{dem_stats['horizon_envelope_deg']}°)."
+                if all_recomputed
+                else f"Center + cardinal offsets + {dem_stats['landing_dispersion_sigma']:g}-sigma DEM vertical propagation ({dem_stats['dem_vertical_sigma_m']}m); center Horizons reused where offset failed."
+            ),
+        }
+    return result
 
 
 @app.post("/api/v1/scenarios/evaluate", response_model=ScenarioResult, tags=["Scenarios"])
 async def evaluate_scenario(scenario: Scenario, request: Request) -> ScenarioResult:
-    return await evaluate(scenario, request.app.state.horizons, request.app.state.dem)
+    return await evaluate(scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
 
 
 @app.post("/api/v1/scenarios/compare", response_model=list[ScenarioResult], tags=["Scenarios"])
 async def compare_scenarios(payload: CompareRequest, request: Request) -> list[ScenarioResult]:
-    return [await evaluate(scenario, request.app.state.horizons, request.app.state.dem) for scenario in payload.scenarios]
+    return [await evaluate(scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem) for scenario in payload.scenarios]
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +502,7 @@ async def compare_scenarios(payload: CompareRequest, request: Request) -> list[S
 
 @app.post("/api/v1/scenarios/rank", response_model=RankingResponse, tags=["Scenarios"])
 async def rank_evaluated_scenarios(payload: RankRequest, request: Request) -> RankingResponse:
-    results = [await evaluate(scenario, request.app.state.horizons, request.app.state.dem) for scenario in payload.scenarios]
+    results = [await evaluate(scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem) for scenario in payload.scenarios]
     return rank_scenarios(results, payload.weights)
 
 
@@ -377,8 +548,8 @@ async def evaluate_mission_delta(payload: MissionDeltaRequest, request: Request)
         }
     )
 
-    baseline_result = await evaluate(base_sc, request.app.state.horizons, request.app.state.dem)
-    rescheduled_result = await evaluate(rescheduled_sc, request.app.state.horizons, request.app.state.dem)
+    baseline_result = await evaluate(base_sc, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
+    rescheduled_result = await evaluate(rescheduled_sc, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
 
     return compute_mission_delta(
         baseline_result=baseline_result,
@@ -394,9 +565,20 @@ async def evaluate_mission_delta(payload: MissionDeltaRequest, request: Request)
 # ---------------------------------------------------------------------------
 
 
+class CopilotAskRequest(BaseModel):
+    scenario: Scenario
+    user_query: str | None = Field(default=None, max_length=500)
+
+
 @app.post("/api/v1/copilot/explain", response_model=CopilotResponse, tags=["AI Copilot"])
 def copilot_explain(payload: CopilotRequest) -> CopilotResponse:
     return diagnose_scenario(payload.scenario_result, payload.user_query)
+
+
+@app.post("/api/v1/copilot/ask", response_model=CopilotResponse, tags=["AI Copilot"])
+async def copilot_ask(payload: CopilotAskRequest, request: Request) -> CopilotResponse:
+    result = await evaluate(payload.scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
+    return diagnose_scenario(result, payload.user_query)
 
 
 @app.post("/api/v1/copilot/parse-constraints", response_model=Constraints, tags=["AI Copilot"])
@@ -413,7 +595,7 @@ def copilot_parse_constraints(payload: dict[str, str]) -> Constraints:
 
 @app.post("/api/v1/simulation/power", response_model=PowerSimulationResult, tags=["Simulation"])
 async def simulate_mission_power(payload: PowerSimulationRequest, request: Request) -> PowerSimulationResult:
-    result = await evaluate(payload.scenario, request.app.state.horizons, request.app.state.dem)
+    result = await evaluate(payload.scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
     return simulate_power(result, payload.config)
 
 
@@ -424,7 +606,7 @@ async def simulate_mission_power(payload: PowerSimulationRequest, request: Reque
 
 @app.post("/api/v1/scenarios/export/csv", tags=["Export"])
 async def export_scenario_csv(scenario: Scenario, request: Request) -> Response:
-    result = await evaluate(scenario, request.app.state.horizons, request.app.state.dem)
+    result = await evaluate(scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
@@ -450,9 +632,32 @@ async def export_scenario_csv(scenario: Scenario, request: Request) -> Response:
         "sampling_minutes",
         "transition_bracket_minutes",
         "precision_note",
+        "terrain_sources",
+        "fine_coverage_km",
+        "observer_height_m",
+        "max_horizon_distance_km",
+        "sun_obstacle_distance_km",
+        "sun_obstacle_source",
+        "earth_obstacle_distance_km",
+        "earth_obstacle_source",
+        "spatial_radius_m",
+        "dem_vertical_sigma_m",
+        "landing_dispersion_sigma",
+        "horizon_envelope_deg",
+        "sunlit_percent_range",
+        "earth_visible_percent_range",
+        "spatial_method",
     ])
     for s in result.samples:
         hour_offset = round((s.time_utc - scenario.start_utc).total_seconds() / 3600.0, 2)
+        def obstacle(azimuth: float):
+            if not result.horizon_profile:
+                return None
+            return min(result.horizon_profile,
+                       key=lambda point: abs((point.azimuth_deg - azimuth + 180) % 360 - 180))
+        sun_obstacle = obstacle(s.sun.azimuth_deg)
+        earth_obstacle = obstacle(s.earth.azimuth_deg)
+        uncertainty = result.spatial_uncertainty or {}
         writer.writerow([
             s.time_utc.isoformat(),
             hour_offset,
@@ -472,10 +677,25 @@ async def export_scenario_csv(scenario: Scenario, request: Request) -> Response:
             scenario.site.longitude_deg,
             result.ephemeris_source,
             result.horizon_source,
-            240 if scenario.use_dem_horizon else "",
+            20 if result.fine_coverage_km else 240 if scenario.use_dem_horizon else "",
             result.timeline.transition_resolution_minutes,
             result.timeline.refined_transition_resolution_minutes or result.timeline.transition_resolution_minutes,
             result.precision_note,
+            ";".join(result.terrain_sources),
+            result.fine_coverage_km,
+            scenario.observer_height_m,
+            scenario.max_horizon_distance_km,
+            sun_obstacle.obstacle_distance_km if sun_obstacle else "",
+            sun_obstacle.obstacle_source if sun_obstacle else "",
+            earth_obstacle.obstacle_distance_km if earth_obstacle else "",
+            earth_obstacle.obstacle_source if earth_obstacle else "",
+            uncertainty.get("radius_m", ""),
+            uncertainty.get("dem_vertical_sigma_m", ""),
+            uncertainty.get("landing_dispersion_sigma", ""),
+            uncertainty.get("horizon_envelope_deg", ""),
+            uncertainty.get("sunlit_percent_range", ""),
+            uncertainty.get("earth_visible_percent_range", ""),
+            uncertainty.get("method", ""),
         ])
     filename = f"lunar_scenario_{(scenario.site.label or 'site').replace(' ', '_')}.csv"
     return Response(
@@ -499,15 +719,22 @@ async def analyze_legacy(payload: LegacyAnalyzeRequest, request: Request) -> Leg
         start_utc=payload.start_time,
         end_utc=end_time,
         step_minutes=payload.step_minutes,
+        refine_transitions=payload.refine_transitions,
+        refinement_step_minutes=payload.refinement_step_minutes,
         use_dem_horizon=payload.use_dem_horizon,
         observer_height_m=payload.observer_height_m,
         max_horizon_distance_km=payload.max_horizon_distance_km,
+        spatial_uncertainty_radius_m=payload.spatial_uncertainty_radius_m,
+        dem_vertical_error_m=payload.dem_vertical_error_m,
+        landing_dispersion_sigma=payload.landing_dispersion_sigma,
         constraints=Constraints(min_earth_elevation_deg=payload.min_earth_elevation_deg),
     )
-    result = await evaluate(scenario, request.app.state.horizons, request.app.state.dem)
+    result = await evaluate(scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
     legacy_samples = [
         LegacySample(
             hour=int(round((s.time_utc - payload.start_time).total_seconds() / 3600.0)),
+            hour_offset=round((s.time_utc - payload.start_time).total_seconds() / 3600.0, 4),
+            time_utc=s.time_utc,
             sun_azimuth=s.sun.azimuth_deg,
             earth_azimuth=s.earth.azimuth_deg,
             sun_elevation=s.sun.elevation_deg,
@@ -540,8 +767,11 @@ async def analyze_legacy(payload: LegacyAnalyzeRequest, request: Request) -> Leg
             "longestBlackout": result.metrics.longest_earth_blackout_hours,
         },
         ephemeris_source=result.ephemeris_source,
-        dem_pixel_scale_m=240 if payload.use_dem_horizon else None,
-        sampling_minutes=payload.step_minutes,
+        dem_pixel_scale_m=(20 if result.fine_coverage_km else 240) if payload.use_dem_horizon else None,
+        terrain_sources=result.terrain_sources,
+        spatial_uncertainty=result.spatial_uncertainty,
+        events=result.timeline.events,
+        sampling_minutes=result.timeline.transition_resolution_minutes,
         transition_uncertainty_minutes=result.timeline.transition_resolution_minutes,
         precision_note=result.precision_note,
     )

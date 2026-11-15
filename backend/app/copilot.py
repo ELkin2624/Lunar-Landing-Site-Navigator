@@ -133,28 +133,67 @@ def diagnose_scenario(result: ScenarioResult, user_query: str | None = None) -> 
     direct_answer = None
     if user_query:
         q = user_query.lower()
+        sources_txt = ", ".join(result.terrain_sources) if result.terrain_sources else result.horizon_source
         if "batería" in q or "bateria" in q or "energía" in q or "energia" in q:
             direct_answer = (
-                f"Para este escenario en '{site_label}', la batería debe ser capaz de alimentar la carga vital durante al menos "
-                f"{m.longest_darkness_hours} horas consecutivas de oscuridad. La generación solar total cubre el {sun_pct}% del tiempo."
+                f"Para este escenario en '{site_label}', la batería debe alimentar la carga vital durante al menos "
+                f"{m.longest_darkness_hours} horas consecutivas de oscuridad. La generación solar cubre el {sun_pct}% del tiempo "
+                f"(simultaneidad Sol+Tierra: {conc_pct}%)."
             )
-        elif "comunicación" in q or "comunicacion" in q or "tierra" in q or "blackout" in q:
+        elif "comunicación" in q or "comunicacion" in q or "tierra" in q or "blackout" in q or "enlace" in q:
             direct_answer = (
-                f"La comunicación directa con la Tierra está garantizada el {earth_pct}% del tiempo. "
-                f"El período más largo sin línea de visión es de {m.longest_earth_blackout_hours} horas. "
-                f"Fuente de datos de horizonte: {result.horizon_source}."
+                f"La comunicación directa con la Tierra está disponible el {earth_pct}% del tiempo, "
+                f"con un blackout continuo máximo de {m.longest_earth_blackout_hours} horas. "
+                f"Horizonte evaluado con {result.horizon_source} ({sources_txt})."
+            )
+        elif "incertidumbre" in q or "margen" in q or "error" in q or "240" in q or "sensibilidad" in q:
+            sp = result.spatial_uncertainty
+            if sp:
+                sun_r = sp.get("sunlit_percent_range", [])
+                earth_r = sp.get("earth_visible_percent_range", [])
+                direct_answer = (
+                    f"En un radio de ±{sp.get('radius_m')} m alrededor de '{site_label}' ({sp.get('sites_evaluated')} puntos), "
+                    f"la visibilidad solar varía entre {sun_r[0]}% y {sun_r[1]}%, y la terrestre entre {earth_r[0]}% y {earth_r[1]}%. "
+                    f"La resolución temporal de transiciones es de ±{result.timeline.transition_resolution_minutes / 2:.1f} min."
+                )
+            else:
+                direct_answer = (
+                    f"La incertidumbre temporal de cada transición es de ±{result.timeline.transition_resolution_minutes / 2:.1f} min "
+                    f"(paso de {result.timeline.transition_resolution_minutes} min). Activa spatial_uncertainty_radius_m para evaluar puntos vecinos."
+                )
+        elif "ventana" in q or "amanecer" in q or "ocaso" in q or "transicion" in q or "transición" in q or "cuando" in q or "cuándo" in q:
+            ev_count = len(result.timeline.events)
+            next_sun = result.timeline.next_sun_visibility_start_utc or result.timeline.next_sun_visibility_end_utc
+            next_earth = result.timeline.next_earth_visibility_start_utc or result.timeline.next_earth_visibility_end_utc
+            direct_answer = (
+                f"Se detectaron {ev_count} transiciones en el periodo ({len(m.sunlit_windows)} ventanas solares y {len(m.earth_visible_windows)} de Tierra). "
+                f"Próximo cambio solar: {next_sun.isoformat() if next_sun else 'ninguno en el rango'}. "
+                f"Próximo cambio terrestre: {next_earth.isoformat() if next_earth else 'ninguno en el rango'}."
+            )
+        elif "pendiente" in q or "terreno" in q or "relieve" in q or "dem" in q or "20m" in q or "20 m" in q or "crater" in q or "cráter" in q:
+            direct_answer = (
+                f"El perfil del horizonte en '{site_label}' usa {result.horizon_source} ({sources_txt}), "
+                f"con cobertura fina de 20 m/px hasta {result.fine_coverage_km} km y cota observador de {result.site_height_km_used:.3f} km. "
+                f"Este análisis no resuelve rocas ni cráteres menores que la malla del DEM."
+            )
+        elif "disco" in q or "parcial" in q or "sombra" in q or "oscuridad" in q or "noche" in q:
+            partial_sun = sum(1 for s in result.samples if s.sun.disk_state == "partial")
+            direct_answer = (
+                f"En '{site_label}' la oscuridad continua máxima es de {m.longest_darkness_hours} h ({100 - sun_pct:.1f}% sin Sol pleno). "
+                f"Se registraron {partial_sun} muestras con exposición parcial del disco solar sobre el horizonte."
             )
         elif "por qué" in q or "porque" in q or "razón" in q or "razon" in q:
             direct_answer = (
-                f"Las variaciones observadas provienen de la combinación de la trayectoria orbital calculada por JPL Horizons "
-                f"y la elevación del horizonte lunar ({result.horizon_source}). Cuando el astro cae por debajo del relieve local, "
+                f"Las variaciones observadas provienen de la combinación de la trayectoria orbital calculada por {result.ephemeris_source} "
+                f"y la elevación del horizonte lunar ({result.horizon_source}: {sources_txt}). Cuando el astro cae por debajo del relieve local, "
                 f"se produce la interrupción de la ventana operativa."
             )
         else:
             direct_answer = (
-                f"Respuesta del Copiloto para '{user_query}': En '{site_label}' del {sc.start_utc.strftime('%Y-%m-%d')} al {sc.end_utc.strftime('%Y-%m-%d')}, "
-                f"se cuenta con {sun_pct}% de luz solar, {earth_pct}% de visibilidad terrestre y {conc_pct}% de concurrencia. "
-                f"Estado de restricciones: {'Cumplidas' if m.constraints_met else 'No cumplidas'}."
+                f"Resumen para '{site_label}' ({sc.start_utc.strftime('%Y-%m-%d')} a {sc.end_utc.strftime('%Y-%m-%d')}): "
+                f"{sun_pct}% de luz solar, {earth_pct}% de visibilidad terrestre, {conc_pct}% de simultaneidad, "
+                f"noche máxima {m.longest_darkness_hours} h y blackout máximo {m.longest_earth_blackout_hours} h. "
+                f"Restricciones: {'Cumplidas' if m.constraints_met else 'No cumplidas'}."
             )
 
     scientific_exp = (

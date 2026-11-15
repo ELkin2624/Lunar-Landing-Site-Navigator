@@ -1,0 +1,198 @@
+{
+  "method": "Minute-scale (5 min) comparison between JPL Horizons (DE440/441), IMCCE INPOP19a + MOON_ME (DE440 libration PCK), and IMCCE INPOP19a + IAU_MOON (NAIF pck00011.tpc analytic orientation)",
+  "pck00011_url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc",
+  "pck00011_sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1",
+  "cases": [
+    {
+      "site": "de Gerlache Rim 2",
+      "latitude_deg": -88.3,
+      "longitude_deg": -59.5,
+      "height_km_used": -0.053,
+      "start_utc": "2027-02-15T00:00:00+00:00",
+      "end_utc": "2027-02-22T00:00:00+00:00",
+      "step_minutes": 5,
+      "bodies": [
+        {
+          "body": "SUN",
+          "samples_5min": 2016,
+          "horizons_vs_inpop_moon_me": {
+            "max_azimuth_diff_deg": 1e-06,
+            "max_elevation_diff_deg": 1e-06,
+            "classification_disagreements": 0
+          },
+          "horizons_vs_inpop_iau_moon": {
+            "max_azimuth_diff_deg": 0.002,
+            "max_elevation_diff_deg": 0.0018,
+            "classification_disagreements": 1,
+            "horizons_transition_count": 5,
+            "iau_moon_transition_count": 5,
+            "max_transition_time_shift_minutes": 5.0
+          }
+        },
+        {
+          "body": "EARTH",
+          "samples_5min": 2016,
+          "horizons_vs_inpop_moon_me": {
+            "max_azimuth_diff_deg": 1e-06,
+            "max_elevation_diff_deg": 2.7e-05,
+            "classification_disagreements": 0
+          },
+          "horizons_vs_inpop_iau_moon": {
+            "max_azimuth_diff_deg": 0.0021,
+            "max_elevation_diff_deg": 0.001,
+            "classification_disagreements": 0,
+            "horizons_transition_count": 1,
+            "iau_moon_transition_count": 1,
+            "max_transition_time_shift_minutes": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "site": "Mons Mouton",
+      "latitude_deg": -84.6,
+      "longitude_deg": 31.0,
+      "height_km_used": 5.031,
+      "start_utc": "2027-02-15T00:00:00+00:00",
+      "end_utc": "2027-02-22T00:00:00+00:00",
+      "step_minutes": 5,
+      "bodies": [
+        {
+          "body": "SUN",
+          "samples_5min": 2016,
+          "horizons_vs_inpop_moon_me": {
+            "max_azimuth_diff_deg": 1e-06,
+            "max_elevation_diff_deg": 1e-06,
+            "classification_disagreements": 0
+          },
+          "horizons_vs_inpop_iau_moon": {
+            "max_azimuth_diff_deg": 0.002,
+            "max_elevation_diff_deg": 0.0018,
+            "classification_disagreements": 0,
+            "horizons_transition_count": 1,
+            "iau_moon_transition_count": 1,
+            "max_transition_time_shift_minutes": 0.0
+          }
+        },
+        {
+          "body": "EARTH",
+          "samples_5min": 2016,
+          "horizons_vs_inpop_moon_me": {
+            "max_azimuth_diff_deg": 2e-06,
+            "max_elevation_diff_deg": 2.6e-05,
+            "classification_disagreements": 0
+          },
+          "horizons_vs_inpop_iau_moon": {
+            "max_azimuth_diff_deg": 0.0022,
+            "max_elevation_diff_deg": 0.0008,
+            "classification_disagreements": 1,
+            "horizons_transition_count": 1,
+            "iau_moon_transition_count": 1,
+            "max_transition_time_shift_minutes": 5.0
+          }
+        }
+      ]
+    }
+  ],
+  "external_stereo_dem_validation": {
+    "status": "validated",
+    "method": "Direct point-by-point & 2 km horizon comparison of LOLA LDEM_875S_20M and LDEM_75S_240M against independent PDS4 LROC NAC stereo DTMs (2.0 m/px)",
+    "products": [
+      {
+        "product_id": "NAC_DTM_ESALL_CR1",
+        "region": "Connecting Ridge (Shackleton-de Gerlache)",
+        "url": "https://pds.mcp.nasa.gov/data/store/img/lunar_reconnaissance_orbiter/pds4/lroc/lro-l-lroc-5-rdr/LROLRC_2001/DATA/SDP/NAC_DTM/ESALL_CR1/NAC_DTM_ESALL_CR1.TIF",
+        "nac_pixel_scale_m": 2.0,
+        "valid_fraction": 0.9378,
+        "vs_lola_240m": {
+          "samples": 4001,
+          "mean_bias_m_nac_minus_lola": 1.993,
+          "std_m": 16.871,
+          "mae_m": 13.003,
+          "rmse_m": 16.988,
+          "p95_abs_m": 35.5,
+          "max_abs_m": 56.86
+        },
+        "vs_lola_20m": {
+          "samples": 4001,
+          "mean_bias_m_nac_minus_lola": 1.11,
+          "std_m": 2.432,
+          "mae_m": 2.016,
+          "rmse_m": 2.674,
+          "p95_abs_m": 5.56,
+          "max_abs_m": 21.54
+        },
+        "horizontal_registration_vs_20m": {
+          "dx_m": 0,
+          "dy_m": 0,
+          "rmse_m": 2.727,
+          "bias_corrected_std_m": 2.49,
+          "zero_shift_std_m": 2.49
+        },
+        "horizontal_registration_vs_240m": {
+          "dx_m": 0,
+          "dy_m": 0,
+          "rmse_m": 16.876,
+          "bias_corrected_std_m": 16.782,
+          "zero_shift_std_m": 16.782
+        },
+        "local_2km_horizon_comparison": {
+          "center_lat_deg": -89.46485,
+          "center_lon_deg": -137.89731,
+          "max_distance_m": 2000,
+          "azimuths_evaluated": 36,
+          "mean_horizon_abs_diff_vs_lola_240m_deg": 2.796,
+          "mean_horizon_abs_diff_vs_lola_20m_deg": 0.248,
+          "p95_horizon_abs_diff_vs_lola_20m_deg": 0.509
+        }
+      },
+      {
+        "product_id": "NAC_DTM_ESALL_MP1",
+        "region": "Mons Malapert",
+        "url": "https://pds.mcp.nasa.gov/data/store/img/lunar_reconnaissance_orbiter/pds4/lroc/lro-l-lroc-5-rdr/LROLRC_2001/DATA/SDP/NAC_DTM/ESALL_MP1/NAC_DTM_ESALL_MP1.TIF",
+        "nac_pixel_scale_m": 2.0,
+        "valid_fraction": 0.9803,
+        "vs_lola_240m": {
+          "samples": 4003,
+          "mean_bias_m_nac_minus_lola": 1.133,
+          "std_m": 18.91,
+          "mae_m": 15.182,
+          "rmse_m": 18.944,
+          "p95_abs_m": 36.258,
+          "max_abs_m": 65.36
+        },
+        "vs_lola_20m": null,
+        "horizontal_registration_vs_20m": null,
+        "horizontal_registration_vs_240m": {
+          "dx_m": 0,
+          "dy_m": 0,
+          "rmse_m": 19.639,
+          "bias_corrected_std_m": 19.567,
+          "zero_shift_std_m": 19.567
+        },
+        "local_2km_horizon_comparison": {
+          "center_lat_deg": -85.97492,
+          "center_lon_deg": -2.36563,
+          "max_distance_m": 2000,
+          "azimuths_evaluated": 36,
+          "mean_horizon_abs_diff_vs_lola_240m_deg": 4.589,
+          "mean_horizon_abs_diff_vs_lola_20m_deg": null,
+          "p95_horizon_abs_diff_vs_lola_20m_deg": null
+        }
+      }
+    ],
+    "lola_20m_vs_240m_boundary": {
+      "samples": 216,
+      "latitudes_tested_deg": [
+        -87.52,
+        -87.6,
+        -88.0
+      ],
+      "mean_bias_m_20m_minus_240m": -0.593,
+      "rmse_m": 15.575,
+      "p95_abs_m": 29.0,
+      "max_abs_m": 78.5
+    }
+  },
+  "scientific_interpretation": "IAU_MOON is an analytic uniform-rotation frame omitting physical librations and the principal-axis to Mean-Earth offset (~0.02 deg), so small angular and single-step transition differences versus DE440 MOON_ME measure sensitivity to the lunar orientation model."
+}

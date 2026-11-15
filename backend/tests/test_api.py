@@ -27,9 +27,14 @@ def test_horizon_wraparound():
 
 
 class FakeHorizons:
+    def __init__(self):
+        self.calls = 0
+
     async def positions(self, body_id, site, start, end, step_minutes):
+        self.calls += 1
         elevation = 5 if body_id == 10 else -2
-        return [(start + timedelta(hours=i), 90, elevation) for i in range(4)]
+        hours = max(1, int((end - start).total_seconds() / (step_minutes * 60)))
+        return [(start + timedelta(minutes=i * step_minutes), 90, elevation) for i in range(hours + 1)]
 
 
 def test_evaluate_and_validation(monkeypatch, tmp_path):
@@ -84,6 +89,27 @@ def test_lola_projection_and_curved_horizon(tmp_path: Path):
         assert site_height_km == 0.002
         assert profile[0].elevation_deg > 45
         assert profile[18].elevation_deg < 0
+
+
+def test_mixed_horizon_tracks_near_fine_obstacle_and_source(tmp_path: Path):
+    coarse_path = synthetic_dem(tmp_path)
+    fine_path = tmp_path / "ldem_875s_20m.img"
+    fine_path.with_suffix(".lbl").write_bytes((Path(__file__).parents[1] / "data" / "ldem_875s_20m.lbl").read_bytes())
+    with fine_path.open("wb") as output:
+        output.truncate(7584 * 7584 * 2)
+    site = Site(latitude_deg=-89.5, longitude_deg=0)
+    ridge_lat, ridge_lon = _destination(site.latitude_deg, site.longitude_deg, 0, 100)
+    with LolaDem(fine_path) as fine:
+        row, col = fine.pixel_index(ridge_lat, ridge_lon)
+    with fine_path.open("r+b") as output:
+        output.seek(2 * (row * 7584 + col))
+        output.write(struct.pack("<h", 2000))
+    with LolaDem(coarse_path) as broad, LolaDem(fine_path) as fine:
+        profile, _ = horizon_profile(broad, site, max_distance_km=6, azimuth_step_deg=10, fine_dem=fine)
+        assert profile[0].elevation_deg > 70
+        assert profile[0].obstacle_source == "LDEM_875S_20M"
+        assert profile[0].obstacle_pixel_scale_m == 20
+        assert profile[0].obstacle_distance_km <= 0.11
 
 
 def test_distant_massif_beyond_100_km_raises_the_skyline(tmp_path: Path):
@@ -149,6 +175,35 @@ def test_evaluate_with_dem(monkeypatch, tmp_path):
         horizon = client.post("/api/v1/terrain/horizon", json={"site": payload["site"], "max_distance_km": 1})
         assert horizon.status_code == 200, horizon.text
         assert len(horizon.json()["profile"]) == 360
+
+        # Test spatial uncertainty recomputes Horizons per cardinal offset
+        fake = FakeHorizons()
+        app.state.horizons = fake
+        unc = client.post("/api/v1/scenarios/evaluate", json={**payload, "spatial_uncertainty_radius_m": 240, "landing_dispersion_sigma": 3.0})
+        assert unc.status_code == 200, unc.text
+        sp_unc = unc.json()["spatial_uncertainty"]
+        assert sp_unc["ephemeris_recomputed_per_offset"] is True
+        assert sp_unc["sites_evaluated"] == 5
+        assert sp_unc["dem_vertical_sigma_m"] > 0
+        assert sp_unc["landing_dispersion_sigma"] == 3.0
+        assert sp_unc["horizon_envelope_deg"] > 0
+        assert fake.calls == 10  # 2 bodies * (1 center + 4 cardinal offsets)
+
+        # Test legacy refine_transitions + copilot ask
+        refined = client.post("/api/scenarios/analyze", json={
+            "latitude": -89.5, "longitude": 0,
+            "start_time": "2026-11-15T00:00:00Z", "hours": 2,
+            "step_minutes": 60, "refine_transitions": True, "refinement_step_minutes": 15,
+            "spatial_uncertainty_radius_m": 0,
+        })
+        assert refined.status_code == 200, refined.text
+        assert refined.json()["sampling_minutes"] == 15
+        assert len(refined.json()["samples"]) == 8
+        assert refined.json()["samples"][1]["hour_offset"] == 0.25
+
+        ask = client.post("/api/v1/copilot/ask", json={"scenario": payload, "user_query": "¿Cuál es la incertidumbre?"})
+        assert ask.status_code == 200, ask.text
+        assert "incertidumbre" in ask.json()["direct_answer"].lower()
 
 
 def test_timeline_transitions_and_windows():

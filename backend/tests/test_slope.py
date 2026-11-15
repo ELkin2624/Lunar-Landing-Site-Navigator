@@ -77,3 +77,23 @@ def test_slope_endpoint(monkeypatch, tmp_path: Path):
         assert client.post("/api/v1/terrain/slope", json={**payload, "baseline_pixels": 3}).status_code == 422
         assert client.get("/api/v1/sites/shackleton/slope?threshold_deg=15").status_code == 200
         assert client.get("/api/v1/sites/unknown/slope").status_code == 404
+
+
+def test_fine_dem_20m_slope(tmp_path: Path):
+    fine_path = tmp_path / "ldem_875s_20m.img"
+    fine_path.with_suffix(".lbl").write_bytes((Path(__file__).parents[1] / "data" / "ldem_875s_20m.lbl").read_bytes())
+    with fine_path.open("wb") as output:
+        output.truncate(7584 * 7584 * 2)
+    with LolaDem(fine_path) as dem:
+        row, col = dem.pixel_index(SITE.latitude_deg, SITE.longitude_deg)
+        size = dem.size
+    with fine_path.open("r+b") as output:
+        for r in range(row - 10, row + 11):
+            output.seek(2 * (r * size + col - 10))
+            output.write(struct.pack("<21h", *(20 * dc for dc in range(-10, 11))))
+    with LolaDem(fine_path) as dem:
+        result = regional_slope(dem, SITE, neighborhood_radius_m=100, threshold_deg=30)
+    assert result.pixel_scale_m == 20
+    assert result.source == "LOLA_LDEM_875S_20M_PDS"
+    assert [s.baseline_m for s in result.multiscale] == pytest.approx([20, 40, 80], abs=0.1)
+    assert result.slope_deg > 20

@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { apiEnabled, fetchTerrainMesh, type TerrainMesh } from './api'
+import { apiEnabled, fetchNacTexture, fetchTerrainMesh, type TerrainMesh } from './api'
 import type { Sample, Site } from './data'
 
 type View = 'local' | 'globe'
 type Body = 'moon' | 'sun' | 'earth'
+type Quality = 'auto' | 'high' | 'save'
 
 function bodyVector(latitude: number, longitude: number): THREE.Vector3 {
   const lat = THREE.MathUtils.degToRad(latitude)
@@ -32,7 +33,7 @@ function sunDirection(site: Site, sample: Sample, view: View): THREE.Vector3 {
     .add(up.multiplyScalar(Math.sin(el))).normalize()
 }
 
-function localGeometry(mesh: TerrainMesh): THREE.BufferGeometry {
+function localGeometry(mesh: TerrainMesh, useLocalTexture: boolean): THREE.BufferGeometry {
   const positions: number[] = []
   const uvs: number[] = []
   const indices: number[] = []
@@ -41,8 +42,8 @@ function localGeometry(mesh: TerrainMesh): THREE.BufferGeometry {
     for (let col = 0; col < mesh.gridSize; col++) {
       const height = mesh.heightsM[row * mesh.gridSize + col]
       positions.push((col - half) * mesh.gridSpacingM, (height - mesh.minHeightM) * 3, (row - half) * mesh.gridSpacingM)
-      uvs.push((mesh.centerXM + (col - half) * mesh.gridSpacingM + 192_000) / 384_000,
-        (mesh.centerYM - (row - half) * mesh.gridSpacingM + 192_000) / 384_000)
+      uvs.push(useLocalTexture ? col / (mesh.gridSize - 1) : (mesh.centerXM + (col - half) * mesh.gridSpacingM + 192_000) / 384_000,
+        useLocalTexture ? 1 - row / (mesh.gridSize - 1) : (mesh.centerYM - (row - half) * mesh.gridSpacingM + 192_000) / 384_000)
       if (row < mesh.gridSize - 1 && col < mesh.gridSize - 1) {
         const a = row * mesh.gridSize + col
         indices.push(a, a + mesh.gridSize, a + 1, a + 1, a + mesh.gridSize, a + mesh.gridSize + 1)
@@ -60,8 +61,13 @@ function localGeometry(mesh: TerrainMesh): THREE.BufferGeometry {
 export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   const [view, setView] = useState<View>(apiEnabled ? 'local' : 'globe')
   const [focus, setFocus] = useState<Body>('moon')
+  const [quality, setQuality] = useState<Quality>('auto')
+  const [measuredFps, setMeasuredFps] = useState<number | null>(null)
+  const [perfTelemetry, setPerfTelemetry] = useState<{ loadMs: number; tris: number; heapMb: number | null; assetTier: 'LOD' | 'HD' } | null>(null)
   const [mesh, setMesh] = useState<TerrainMesh | null>(null)
   const [meshError, setMeshError] = useState<string | null>(null)
+  const [textureInfo, setTextureInfo] = useState<{ url: string; pixelM: number; coverage: number } | null>(null)
+  const [textureError, setTextureError] = useState<string | null>(null)
   const [renderError, setRenderError] = useState<string | null>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const lightRef = useRef<THREE.DirectionalLight | null>(null)
@@ -70,6 +76,22 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   const drawRef = useRef<(() => void) | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const controlsRef = useRef<OrbitControls | null>(null)
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
+  const qualityRef = useRef<Quality>('auto')
+  const adaptiveLow = useRef(false)
+  const highDetailGlobe = view === 'globe' && quality === 'high'
+
+  useEffect(() => {
+    qualityRef.current = quality
+    adaptiveLow.current = false
+    const renderer = rendererRef.current
+    const host = hostRef.current
+    if (renderer && host) {
+      renderer.setPixelRatio(quality === 'high' ? Math.min(window.devicePixelRatio || 1, 1.5) : quality === 'save' ? 0.75 : Math.min(window.devicePixelRatio || 1, 1.25))
+      renderer.setSize(host.clientWidth, host.clientHeight)
+      drawRef.current?.()
+    }
+  }, [quality])
 
   useEffect(() => {
     setMesh(null)
@@ -83,13 +105,28 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   }, [site])
 
   useEffect(() => {
+    setTextureInfo(null)
+    setTextureError(null)
+    if (!mesh || view !== 'local') return
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+    fetchNacTexture(site, mesh.spanM, controller.signal).then(info => {
+      if (controller.signal.aborted) { URL.revokeObjectURL(info.url); return }
+      objectUrl = info.url
+      setTextureInfo(info)
+    }).catch(error => { if (!controller.signal.aborted) setTextureError(String(error)) })
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [mesh, site, view])
+
+  useEffect(() => {
     const host = hostRef.current
     if (!host || (view === 'local' && !mesh)) return
     setRenderError(null)
     let renderer: THREE.WebGLRenderer
     try { renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'high-performance' }) }
     catch { setRenderError('WebGL no está disponible en este navegador.'); return }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25))
+    renderer.setPixelRatio(qualityRef.current === 'high' ? Math.min(window.devicePixelRatio || 1, 1.5) : qualityRef.current === 'save' ? 0.75 : Math.min(window.devicePixelRatio || 1, 1.25))
+    rendererRef.current = renderer
     renderer.setClearColor(0x0b1420)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     host.appendChild(renderer.domElement)
@@ -102,20 +139,47 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
     scene.add(light, new THREE.AmbientLight(0xb8c5d2, 1.7))
     lightRef.current = light
     let frame = 0
-    const draw = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; renderer.render(scene, camera) }) }
+    let previousFrame = 0
+    const frameSamples: number[] = []
+    const draw = () => { if (!frame) frame = requestAnimationFrame(now => {
+      frame = 0
+      renderer.render(scene, camera)
+      if (previousFrame && now - previousFrame < 250) frameSamples.push(now - previousFrame)
+      previousFrame = now
+      if (frameSamples.length >= 20) {
+        const fps = Math.round(1000 / (frameSamples.reduce((sum, value) => sum + value, 0) / frameSamples.length))
+        frameSamples.length = 0
+        setMeasuredFps(fps)
+        if (qualityRef.current === 'auto' && fps < 35 && !adaptiveLow.current) {
+          adaptiveLow.current = true
+          renderer.setPixelRatio(0.75)
+          renderer.setSize(host.clientWidth, host.clientHeight)
+        }
+      }
+    }) }
     drawRef.current = draw
     cameraRef.current = camera
     controlsRef.current = controls
     controls.addEventListener('change', draw)
     let disposed = false
+    const sceneStart = performance.now()
+    const recordTelemetry = (assetTier: 'LOD' | 'HD') => {
+      const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
+      setPerfTelemetry({
+        loadMs: Math.round(performance.now() - sceneStart),
+        tris: renderer.info.render.triangles,
+        heapMb: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
+        assetTier,
+      })
+    }
     let local: THREE.BufferGeometry | null = null
     let localMaterial: THREE.Material | null = null
     let texture: THREE.Texture | null = null
     const loadedModels: THREE.Object3D[] = []
     const bodyModels: Partial<Record<Body, THREE.Object3D>> = {}
     if (view === 'local' && mesh) {
-      local = localGeometry(mesh)
-      texture = new THREE.TextureLoader().load('/lroc_wac_south_pole.png', draw)
+      local = localGeometry(mesh, Boolean(textureInfo))
+      texture = new THREE.TextureLoader().load(textureInfo?.url || '/lroc_wac_south_pole.png', draw)
       texture.colorSpace = THREE.SRGBColorSpace
       localMaterial = new THREE.MeshStandardMaterial({ map: texture, color: 0xffffff, roughness: 1, side: THREE.DoubleSide })
       scene.add(new THREE.Mesh(local, localMaterial))
@@ -124,18 +188,21 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
       scene.add(grid)
       camera.position.set(mesh.spanM * 0.8, mesh.spanM * 0.65, mesh.spanM * 0.8)
       controls.target.set(0, (mesh.maxHeightM - mesh.minHeightM) * 1.5, 0)
+      draw()
+      requestAnimationFrame(() => !disposed && recordTelemetry('LOD'))
     } else {
       const marker = new THREE.Mesh(new THREE.SphereGeometry(0.018, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffc476 }))
       marker.position.copy(bodyVector(site.lat, site.lon).multiplyScalar(1.025))
       scene.add(marker)
       camera.position.copy(bodyVector(site.lat, site.lon).multiplyScalar(7))
       controls.target.set(0, 0, 0)
-      new GLTFLoader().load('/luna/luna_cientifica.glb', gltf => {
+      new GLTFLoader().load(highDetailGlobe ? '/luna/luna_cientifica.glb' : '/luna/luna_lod.glb', gltf => {
         if (disposed) return
         scene.add(gltf.scene)
         loadedModels.push(gltf.scene)
         bodyModels.moon = gltf.scene
         draw()
+        requestAnimationFrame(() => !disposed && recordTelemetry(highDetailGlobe ? 'HD' : 'LOD'))
       }, undefined, () => { if (!disposed) setRenderError('No se pudo cargar el modelo GLB del equipo.') })
       const loadBody = (url: string, size: number, body: 'sun' | 'earth') => {
         new GLTFLoader().load(url, gltf => {
@@ -153,8 +220,8 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
           draw()
         }, undefined, () => { if (!disposed) setRenderError(`No se pudo cargar el modelo de ${body === 'sun' ? 'Sol' : 'Tierra'}.`) })
       }
-      loadBody('/sol/sol_cientifico.glb', 0.55, 'sun')
-      loadBody('/tierra/tierra_cientifica.glb', 0.4, 'earth')
+      loadBody(highDetailGlobe ? '/sol/sol_cientifico.glb' : '/sol/sol_lod.glb', 0.55, 'sun')
+      loadBody(highDetailGlobe ? '/tierra/tierra_cientifica.glb' : '/tierra/tierra_lod.glb', 0.4, 'earth')
     }
     let pointerStart: [number, number] | null = null
     const onPointerDown = (event: PointerEvent) => { pointerStart = [event.clientX, event.clientY] }
@@ -207,9 +274,10 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
       cameraRef.current = null
       controlsRef.current = null
       renderer.dispose()
+      rendererRef.current = null
       renderer.domElement.remove()
     }
-  }, [view, mesh, site])
+  }, [view, mesh, site, textureInfo, highDetailGlobe])
 
   useEffect(() => {
     if (!lightRef.current) return
@@ -251,16 +319,17 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   return <section id="mission-3d" className="panel terrain-3d-panel">
     <div className="panel-heading"><div><span className="section-kicker">07 / EXPLORACIÓN ESPACIAL</span><h2>Relieve 3D y cuerpos celestes</h2></div><div className="terrain-view-toggle" role="group" aria-label="Vista tridimensional"><button className={view === 'local' ? 'active' : ''} onClick={() => setView('local')}>Terreno LOLA</button><button className={view === 'globe' ? 'active' : ''} onClick={() => setView('globe')}>Luna, Sol y Tierra</button></div></div>
     <div className="terrain-3d-status"><span>Resultado calculado: Sol {sample.sunVisible ? 'visible' : 'oculto'}</span><span>Tierra {sample.earthVisible ? 'visible' : 'oculta'}</span><span>La imagen 3D ilustra la geometría; no calcula estas ventanas.</span></div>
+    <div className="terrain-quality"><span>Calidad 3D</span><div role="group" aria-label="Calidad del visor 3D"><button className={quality === 'auto' ? 'active' : ''} onClick={() => setQuality('auto')}>Automática</button><button className={quality === 'high' ? 'active' : ''} onClick={() => setQuality('high')}>Alta</button><button className={quality === 'save' ? 'active' : ''} onClick={() => setQuality('save')}>Ahorro</button></div><small>{measuredFps == null ? 'Mueve el visor para medir FPS' : `${measuredFps} FPS${adaptiveLow.current ? ' · resolución reducida' : ''}`}{perfTelemetry ? ` · ${perfTelemetry.assetTier} (${perfTelemetry.loadMs} ms · ${perfTelemetry.tris.toLocaleString()} tris${perfTelemetry.heapMb != null ? ` · ${perfTelemetry.heapMb} MB Heap` : ''})` : ''}</small></div>
     {view === 'globe' && <><div className="body-explorer" role="group" aria-label="Explorar cuerpos celestes">
       <button className={focus === 'moon' ? 'active' : ''} onClick={() => setFocus('moon')}><strong>Luna · sitio</strong><span>Enfocar {site.name}</span></button>
       <button className={focus === 'sun' ? 'active' : ''} onClick={() => setFocus('sun')}><strong>Sol · energía</strong><span>{sample.sunVisible ? 'Visible' : 'Oculto'} · {sample.sunElevation.toFixed(1)}°</span></button>
       <button className={focus === 'earth' ? 'active' : ''} onClick={() => setFocus('earth')}><strong>Tierra · enlace</strong><span>{sample.earthVisible ? 'Directo' : 'Bloqueado'} · {sample.earthElevation.toFixed(1)}°</span></button>
     </div><p className="body-explorer-detail">{focus === 'moon' ? `${site.name}: ${Math.abs(site.lat).toFixed(3)}° S, ${site.lon.toFixed(3)}° E. El marcador indica la ubicación evaluada.` : focus === 'sun' ? `Sol a ${sample.sunElevation.toFixed(1)}°; horizonte local a ${sample.horizonSun.toFixed(1)}°. ${sample.sunVisible ? 'La línea de vista solar está libre en esta muestra.' : 'El relieve bloquea la línea de vista solar en esta muestra.'}` : `Tierra a ${sample.earthElevation.toFixed(1)}°; horizonte local a ${sample.horizonEarth.toFixed(1)}°. ${sample.earthVisible ? 'Hay línea de vista directa en esta muestra.' : 'No hay línea de vista directa en esta muestra.'}`}</p></>}
-    {view === 'local' && mesh?.gridSpacingM === 20 && <p className="terrain-3d-caution">Hay relieve local a 20 m/píxel. Las métricas de luz y comunicación aún usan un horizonte regional de 240 m/píxel; pueden cambiar al incorporar obstáculos cercanos.</p>}
+    {view === 'local' && mesh?.gridSpacingM === 20 && <p className="terrain-3d-caution">Malla local de alta resolución (20 m/píxel). El horizonte de visibilidad combina LOLA 20 m en los primeros 5 km y 240 m hasta 250 km.</p>}
     {view === 'local' && (meshError || !apiEnabled) ? <p className="terrain-3d-message">{meshError || 'Activa el backend y descarga el DEM LOLA para ver el terreno local.'}</p> : view === 'local' && !mesh ? <p className="terrain-3d-message">Cargando malla LOLA del sitio…</p> : null}
     <div ref={hostRef} className="terrain-3d-canvas" style={{ display: view === 'local' && !mesh ? 'none' : undefined }}/>
     {renderError && <p className="terrain-3d-message" role="alert">{renderError}</p>}
-    <p className="terrain-3d-note">{view === 'local' ? `Malla ${mesh?.source ?? 'LOLA'} · ${mesh?.spanM ?? '…'} m de ancho · relieve vertical ×3 · textura WAC estática de 480 m/píxel.` : 'Modelos Blender de Luna, Sol y Tierra · direcciones aparentes desde Horizons; tamaños y distancias fuera de escala.'} La luz sigue el Sol de Horizons; el sombreado 3D es visual y no representa las sombras calculadas por el análisis de visibilidad.</p>
+    <p className="terrain-3d-note">{view === 'local' ? `Malla ${mesh?.source ?? 'LOLA'} · ${mesh?.spanM ?? '…'} m de ancho · relieve vertical ×3 · ${textureInfo ? `textura NAC de Moon Trek: tesela ${textureInfo.pixelM.toFixed(1)} m/px, cobertura de teselas ${(textureInfo.coverage * 100).toFixed(0)} %` : `textura WAC de 480 m/px${textureError ? ' (NAC sin cobertura o no disponible)' : ' mientras carga NAC'}`}.` : 'Modelos Blender de Luna, Sol y Tierra · direcciones aparentes desde Horizons; tamaños y distancias fuera de escala.'} La luz sigue el Sol de Horizons; el sombreado 3D es visual y no representa las sombras calculadas por el análisis de visibilidad.</p>
     <p className="terrain-3d-note">También puedes <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener noreferrer">explorar el globo 3D oficial en NASA Moon Trek ↗</a>. En el portal elige «3D Globe»; el enlace no conserva automáticamente este sitio ni la hora.</p>
   </section>
 }

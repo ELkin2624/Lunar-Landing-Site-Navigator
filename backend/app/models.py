@@ -14,6 +14,9 @@ class Site(BaseModel):
 class HorizonPoint(BaseModel):
     azimuth_deg: float = Field(ge=0, lt=360)
     elevation_deg: float = Field(ge=-90, le=90)
+    obstacle_distance_km: float | None = None
+    obstacle_source: str | None = None
+    obstacle_pixel_scale_m: float | None = None
 
 
 class Constraints(BaseModel):
@@ -35,6 +38,9 @@ class Scenario(BaseModel):
     use_dem_horizon: bool = False
     observer_height_m: float = Field(default=2, ge=0, le=100)
     max_horizon_distance_km: float = Field(default=250, ge=1, le=300)
+    spatial_uncertainty_radius_m: float = Field(default=0, ge=0, le=1000)
+    dem_vertical_error_m: float | None = Field(default=None, ge=0, le=200)
+    landing_dispersion_sigma: float = Field(default=3.0, ge=1.0, le=5.0)
     constraints: Constraints = Field(default_factory=Constraints)
 
     @field_validator("start_utc", "end_utc")
@@ -142,6 +148,9 @@ class ScenarioResult(BaseModel):
     horizon_source: str
     site_height_km_used: float
     precision_note: str = "Windows use the reported temporal grid and estimated transition midpoints. Events shorter than that grid can be missed; partial disk exposure is reported separately."
+    terrain_sources: list[str] = Field(default_factory=list)
+    fine_coverage_km: float = 0
+    spatial_uncertainty: dict | None = None
 
 
 class TerrainRequest(BaseModel):
@@ -175,9 +184,14 @@ class LegacyAnalyzeRequest(BaseModel):
     start_time: datetime
     hours: int = Field(default=168, ge=1, le=336)
     step_minutes: int = Field(default=60, ge=15, le=1440)
+    refine_transitions: bool = False
+    refinement_step_minutes: int = Field(default=5, ge=1, le=15)
     use_dem_horizon: bool = False
     observer_height_m: float = Field(default=2, ge=0, le=100)
     max_horizon_distance_km: float = Field(default=250, ge=1, le=300)
+    spatial_uncertainty_radius_m: float = Field(default=240, ge=0, le=1000)
+    dem_vertical_error_m: float | None = Field(default=None, ge=0, le=200)
+    landing_dispersion_sigma: float = Field(default=3.0, ge=1.0, le=5.0)
     min_earth_elevation_deg: float = Field(default=0, ge=0, le=90)
 
     @field_validator("start_time")
@@ -190,6 +204,8 @@ class LegacyAnalyzeRequest(BaseModel):
 
 class LegacySample(BaseModel):
     hour: int
+    hour_offset: float = 0.0
+    time_utc: datetime | None = None
     sun_azimuth: float | None = None
     earth_azimuth: float | None = None
     sun_elevation: float
@@ -215,6 +231,9 @@ class LegacyAnalyzeResponse(BaseModel):
     sampling_minutes: int = 60
     transition_uncertainty_minutes: int = 60
     precision_note: str = "Transition times are estimated within the sampling bracket. Shorter events may be missed."
+    terrain_sources: list[str] = Field(default_factory=list)
+    spatial_uncertainty: dict | None = None
+    events: list[TimelineEvent] = Field(default_factory=list)
 
 
 class EphemerisRequest(BaseModel):

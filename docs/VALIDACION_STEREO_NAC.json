@@ -1,0 +1,100 @@
+{
+  "status": "validated",
+  "method": "Direct point-by-point & 2 km horizon comparison of LOLA LDEM_875S_20M and LDEM_75S_240M against independent PDS4 LROC NAC stereo DTMs (2.0 m/px)",
+  "products": [
+    {
+      "product_id": "NAC_DTM_ESALL_CR1",
+      "region": "Connecting Ridge (Shackleton-de Gerlache)",
+      "url": "https://pds.mcp.nasa.gov/data/store/img/lunar_reconnaissance_orbiter/pds4/lroc/lro-l-lroc-5-rdr/LROLRC_2001/DATA/SDP/NAC_DTM/ESALL_CR1/NAC_DTM_ESALL_CR1.TIF",
+      "nac_pixel_scale_m": 2.0,
+      "valid_fraction": 0.9378,
+      "vs_lola_240m": {
+        "samples": 4001,
+        "mean_bias_m_nac_minus_lola": 1.993,
+        "std_m": 16.871,
+        "mae_m": 13.003,
+        "rmse_m": 16.988,
+        "p95_abs_m": 35.5,
+        "max_abs_m": 56.86
+      },
+      "vs_lola_20m": {
+        "samples": 4001,
+        "mean_bias_m_nac_minus_lola": 1.11,
+        "std_m": 2.432,
+        "mae_m": 2.016,
+        "rmse_m": 2.674,
+        "p95_abs_m": 5.56,
+        "max_abs_m": 21.54
+      },
+      "horizontal_registration_vs_20m": {
+        "dx_m": 0,
+        "dy_m": 0,
+        "rmse_m": 2.727,
+        "bias_corrected_std_m": 2.49,
+        "zero_shift_std_m": 2.49
+      },
+      "horizontal_registration_vs_240m": {
+        "dx_m": 0,
+        "dy_m": 0,
+        "rmse_m": 16.876,
+        "bias_corrected_std_m": 16.782,
+        "zero_shift_std_m": 16.782
+      },
+      "local_2km_horizon_comparison": {
+        "center_lat_deg": -89.46485,
+        "center_lon_deg": -137.89731,
+        "max_distance_m": 2000,
+        "azimuths_evaluated": 36,
+        "mean_horizon_abs_diff_vs_lola_240m_deg": 2.796,
+        "mean_horizon_abs_diff_vs_lola_20m_deg": 0.248,
+        "p95_horizon_abs_diff_vs_lola_20m_deg": 0.509
+      }
+    },
+    {
+      "product_id": "NAC_DTM_ESALL_MP1",
+      "region": "Mons Malapert",
+      "url": "https://pds.mcp.nasa.gov/data/store/img/lunar_reconnaissance_orbiter/pds4/lroc/lro-l-lroc-5-rdr/LROLRC_2001/DATA/SDP/NAC_DTM/ESALL_MP1/NAC_DTM_ESALL_MP1.TIF",
+      "nac_pixel_scale_m": 2.0,
+      "valid_fraction": 0.9803,
+      "vs_lola_240m": {
+        "samples": 4003,
+        "mean_bias_m_nac_minus_lola": 1.133,
+        "std_m": 18.91,
+        "mae_m": 15.182,
+        "rmse_m": 18.944,
+        "p95_abs_m": 36.258,
+        "max_abs_m": 65.36
+      },
+      "vs_lola_20m": null,
+      "horizontal_registration_vs_20m": null,
+      "horizontal_registration_vs_240m": {
+        "dx_m": 0,
+        "dy_m": 0,
+        "rmse_m": 19.639,
+        "bias_corrected_std_m": 19.567,
+        "zero_shift_std_m": 19.567
+      },
+      "local_2km_horizon_comparison": {
+        "center_lat_deg": -85.97492,
+        "center_lon_deg": -2.36563,
+        "max_distance_m": 2000,
+        "azimuths_evaluated": 36,
+        "mean_horizon_abs_diff_vs_lola_240m_deg": 4.589,
+        "mean_horizon_abs_diff_vs_lola_20m_deg": null,
+        "p95_horizon_abs_diff_vs_lola_20m_deg": null
+      }
+    }
+  ],
+  "lola_20m_vs_240m_boundary": {
+    "samples": 216,
+    "latitudes_tested_deg": [
+      -87.52,
+      -87.6,
+      -88.0
+    ],
+    "mean_bias_m_20m_minus_240m": -0.593,
+    "rmse_m": 15.575,
+    "p95_abs_m": 29.0,
+    "max_abs_m": 78.5
+  }
+}

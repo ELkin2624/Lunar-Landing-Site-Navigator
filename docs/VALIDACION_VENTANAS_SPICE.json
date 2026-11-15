@@ -1,0 +1,166 @@
+{
+  "method": "Horizons versus INPOP19a at 30-minute grid using the same mixed LOLA skyline",
+  "shared_lunar_orientation": "moon_pa_de440_200625.bpc",
+  "kernel_sha256": {
+    "naif0012.tls": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+    "inpop19a_19900101_20500101.bsp": "c01d4569b3cb92b531d453cad051ef12fd435009af632821e63262603479e15c",
+    "moon_pa_de440_200625.bpc": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
+    "moon_de440_250416.tf": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768"
+  },
+  "cases": [
+    {
+      "site": "Mons Mouton",
+      "latitude_deg": -84.6,
+      "longitude_deg": 31,
+      "start_utc": "2026-11-15T00:00:00+00:00",
+      "end_utc": "2026-11-22T00:00:00+00:00",
+      "bodies": [
+        {
+          "body": "SUN",
+          "samples": 336,
+          "classification_disagreements": 0,
+          "horizons_visible_fraction": 0.1636904761904762,
+          "inpop_visible_fraction": 0.1636904761904762,
+          "horizons_windows": [
+            [
+              "2026-11-20T20:30:00+00:00",
+              "2026-11-22T00:00:00+00:00"
+            ]
+          ],
+          "inpop_windows": [
+            [
+              "2026-11-20T20:30:00+00:00",
+              "2026-11-22T00:00:00+00:00"
+            ]
+          ],
+          "coarse_240m_windows": [
+            [
+              "2026-11-20T20:30:00+00:00",
+              "2026-11-22T00:00:00+00:00"
+            ]
+          ],
+          "mixed_vs_coarse_disagreements": 0,
+          "coarse_240m_visible_fraction": 0.1636904761904762,
+          "windows_equal_on_30_minute_grid": true
+        },
+        {
+          "body": "EARTH",
+          "samples": 336,
+          "classification_disagreements": 0,
+          "horizons_visible_fraction": 0.75,
+          "inpop_visible_fraction": 0.75,
+          "horizons_windows": [
+            [
+              "2026-11-16T18:00:00+00:00",
+              "2026-11-22T00:00:00+00:00"
+            ]
+          ],
+          "inpop_windows": [
+            [
+              "2026-11-16T18:00:00+00:00",
+              "2026-11-22T00:00:00+00:00"
+            ]
+          ],
+          "coarse_240m_windows": [
+            [
+              "2026-11-16T18:00:00+00:00",
+              "2026-11-22T00:00:00+00:00"
+            ]
+          ],
+          "mixed_vs_coarse_disagreements": 0,
+          "coarse_240m_visible_fraction": 0.75,
+          "windows_equal_on_30_minute_grid": true
+        }
+      ],
+      "horizon_sources": [
+        "LDEM_75S_240M"
+      ]
+    },
+    {
+      "site": "de Gerlache sample",
+      "latitude_deg": -88.3,
+      "longitude_deg": -59.5,
+      "start_utc": "2027-02-15T00:00:00+00:00",
+      "end_utc": "2027-02-22T00:00:00+00:00",
+      "bodies": [
+        {
+          "body": "SUN",
+          "samples": 336,
+          "classification_disagreements": 0,
+          "horizons_visible_fraction": 0.21428571428571427,
+          "inpop_visible_fraction": 0.21428571428571427,
+          "horizons_windows": [
+            [
+              "2027-02-17T13:00:00+00:00",
+              "2027-02-18T07:30:00+00:00"
+            ],
+            [
+              "2027-02-20T00:00:00+00:00",
+              "2027-02-20T01:30:00+00:00"
+            ],
+            [
+              "2027-02-21T08:00:00+00:00",
+              "2027-02-22T00:00:00+00:00"
+            ]
+          ],
+          "inpop_windows": [
+            [
+              "2027-02-17T13:00:00+00:00",
+              "2027-02-18T07:30:00+00:00"
+            ],
+            [
+              "2027-02-20T00:00:00+00:00",
+              "2027-02-20T01:30:00+00:00"
+            ],
+            [
+              "2027-02-21T08:00:00+00:00",
+              "2027-02-22T00:00:00+00:00"
+            ]
+          ],
+          "coarse_240m_windows": [
+            [
+              "2027-02-21T08:00:00+00:00",
+              "2027-02-22T00:00:00+00:00"
+            ]
+          ],
+          "mixed_vs_coarse_disagreements": 40,
+          "coarse_240m_visible_fraction": 0.09523809523809523,
+          "windows_equal_on_30_minute_grid": true
+        },
+        {
+          "body": "EARTH",
+          "samples": 336,
+          "classification_disagreements": 0,
+          "horizons_visible_fraction": 0.7142857142857143,
+          "inpop_visible_fraction": 0.7142857142857143,
+          "horizons_windows": [
+            [
+              "2027-02-15T00:00:00+00:00",
+              "2027-02-20T00:00:00+00:00"
+            ]
+          ],
+          "inpop_windows": [
+            [
+              "2027-02-15T00:00:00+00:00",
+              "2027-02-20T00:00:00+00:00"
+            ]
+          ],
+          "coarse_240m_windows": [
+            [
+              "2027-02-15T00:00:00+00:00",
+              "2027-02-19T23:30:00+00:00"
+            ]
+          ],
+          "mixed_vs_coarse_disagreements": 1,
+          "coarse_240m_visible_fraction": 0.7113095238095238,
+          "windows_equal_on_30_minute_grid": true
+        }
+      ],
+      "horizon_sources": [
+        "LDEM_75S_240M",
+        "LDEM_875S_20M"
+      ]
+    }
+  ],
+  "limit": "Tests complete sampled windows at 30-minute resolution; cannot detect events wholly between samples. Orbital solution is independent; lunar orientation and LOLA terrain are shared."
+}
