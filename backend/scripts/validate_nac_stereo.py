@@ -24,7 +24,8 @@ import httpx
 import numpy as np
 from PIL import Image
 
-from app.terrain import LolaDem, REFERENCE_RADIUS_M, TerrainError
+from app.models import HorizonPoint
+from app.terrain import LolaDem, REFERENCE_RADIUS_M, TerrainError, dem_error_envelopes
 
 ROOT = Path(__file__).resolve().parents[2]
 NAC_DIR = ROOT / "backend" / "data" / "nac_dtm"
@@ -153,12 +154,18 @@ def _local_horizon_comparison(
 
     diffs_deg = []
     diffs_240_deg = []
+    contained_fine = []
+    contained_broad = []
+    envelope_fine = []
+    envelope_broad = []
     # Trace rays every 10 deg out to max distance staying strictly inside NAC tile
     for az in range(0, 360, 10):
         az_rad = math.radians(az)
         sky_nac = -90.0
         sky_fine = -90.0
         sky_broad = -90.0
+        distance_fine = 20
+        distance_broad = 20
         for dist_m in range(20, 2001, 20):
             px = cx + dist_m * math.sin(az_rad)
             py = cy + dist_m * math.cos(az_rad)
@@ -171,13 +178,27 @@ def _local_horizon_comparison(
                 continue
             lat, lon = _xy_to_latlon(px, py)
             sky_nac = max(sky_nac, math.degrees(math.atan2(float(z_nac) - (c_nac_h + 2.0), dist_m)))
-            sky_broad = max(sky_broad, math.degrees(math.atan2(broad.height_m(lat, lon) - (broad.height_m(c_lat, c_lon) + 2.0), dist_m)))
+            angle_broad = math.degrees(math.atan2(broad.height_m(lat, lon) - (broad.height_m(c_lat, c_lon) + 2.0), dist_m))
+            if angle_broad > sky_broad:
+                sky_broad, distance_broad = angle_broad, dist_m
             if fine is not None:
-                sky_fine = max(sky_fine, math.degrees(math.atan2(fine.height_m(lat, lon) - (c_lola_h + 2.0), dist_m)))
+                angle_fine = math.degrees(math.atan2(fine.height_m(lat, lon) - (c_lola_h + 2.0), dist_m))
+                if angle_fine > sky_fine:
+                    sky_fine, distance_fine = angle_fine, dist_m
         if sky_nac > -89.0:
             diffs_240_deg.append(abs(sky_nac - sky_broad))
+            point = HorizonPoint(azimuth_deg=az, elevation_deg=sky_broad,
+                                 obstacle_distance_km=distance_broad / 1000, obstacle_pixel_scale_m=240)
+            upper, lower, _ = dem_error_envelopes([point], uses_fine_site=False)
+            envelope_broad.append(upper[0].elevation_deg - sky_broad)
+            contained_broad.append(lower[0].elevation_deg <= sky_nac <= upper[0].elevation_deg)
             if fine is not None:
                 diffs_deg.append(abs(sky_nac - sky_fine))
+                point = HorizonPoint(azimuth_deg=az, elevation_deg=sky_fine,
+                                     obstacle_distance_km=distance_fine / 1000, obstacle_pixel_scale_m=20)
+                upper, lower, _ = dem_error_envelopes([point], uses_fine_site=True)
+                envelope_fine.append(upper[0].elevation_deg - sky_fine)
+                contained_fine.append(lower[0].elevation_deg <= sky_nac <= upper[0].elevation_deg)
 
     return {
         "center_lat_deg": round(c_lat, 5),
@@ -187,6 +208,10 @@ def _local_horizon_comparison(
         "mean_horizon_abs_diff_vs_lola_240m_deg": round(float(np.mean(diffs_240_deg)), 3) if diffs_240_deg else None,
         "mean_horizon_abs_diff_vs_lola_20m_deg": round(float(np.mean(diffs_deg)), 3) if diffs_deg else None,
         "p95_horizon_abs_diff_vs_lola_20m_deg": round(float(np.percentile(diffs_deg, 95)), 3) if diffs_deg else None,
+        "fraction_nac_horizon_within_3sigma_20m": round(float(np.mean(contained_fine)), 3) if contained_fine else None,
+        "fraction_nac_horizon_within_3sigma_240m": round(float(np.mean(contained_broad)), 3) if contained_broad else None,
+        "median_3sigma_envelope_20m_deg": round(float(np.median(envelope_fine)), 3) if envelope_fine else None,
+        "median_3sigma_envelope_240m_deg": round(float(np.median(envelope_broad)), 3) if envelope_broad else None,
     }
 
 

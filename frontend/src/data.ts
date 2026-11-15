@@ -11,6 +11,7 @@ export type SpatialUncertainty = {
   demVerticalSigmaM?: number
   landingDispersionSigma?: number
   horizonEnvelopeDeg?: number
+  confidenceCalibrated?: boolean
   method: string
 }
 export type TimelineEventItem = { timeUtc: string; kind: 'sun_visibility_start' | 'sun_visibility_end' | 'earth_visibility_start' | 'earth_visibility_end'; bracketStartUtc: string; bracketEndUtc: string; estimatedTimeUtc: string; method: string }
@@ -25,6 +26,10 @@ export type PowerConfig = {
   batteryCapacityWh: number
   initialSocPercent: number
   minAllowableSocPercent: number
+  solarDerateFactor?: number
+  shadowHeaterWatts?: number
+  batteryChargeEfficiency?: number
+  batteryDischargeEfficiency?: number
 }
 
 export type PowerStep = {
@@ -189,16 +194,17 @@ export function computePowerProfile(scenario: Scenario, config: PowerConfig): Po
     const elDeg = s.sunElevation
     const diskFrac = s.sunDiskFraction ?? (s.sunVisible ? 1.0 : 0.0)
     let powerGen = 0
-    if (s.sunVisible && elDeg > s.horizonSun) {
+    if (diskFrac > 0) {
       const cosFactor = Math.max(0, Math.cos(Math.max(0, elDeg) * Math.PI / 180))
-      powerGen = LUNAR_SOLAR_CONSTANT_W_M2 * config.solarPanelAreaM2 * config.panelEfficiency * cosFactor * diskFrac
+      powerGen = LUNAR_SOLAR_CONSTANT_W_M2 * config.solarPanelAreaM2 * config.panelEfficiency * cosFactor * diskFrac * (config.solarDerateFactor ?? 0.8)
     }
-    const netW = powerGen - config.baseLoadWatts
-    const deltaWh = netW * dtHours
+    const loadW = config.baseLoadWatts + (diskFrac <= 0 ? (config.shadowHeaterWatts ?? 0) : 0)
+    const netW = powerGen - loadW
+    const deltaWh = netW * dtHours * (netW >= 0 ? (config.batteryChargeEfficiency ?? 0.9) : 1 / (config.batteryDischargeEfficiency ?? 0.9))
     currentWh = Math.min(config.batteryCapacityWh, Math.max(0, currentWh + deltaWh))
     minWh = Math.min(minWh, currentWh)
     totalGenWh += powerGen * dtHours
-    totalLoadWh += config.baseLoadWatts * dtHours
+    totalLoadWh += loadW * dtHours
     const soc = (currentWh / config.batteryCapacityWh) * 100
     if (soc < config.minAllowableSocPercent) breached = true
     if (currentWh <= 0) survives = false
@@ -214,8 +220,8 @@ export function computePowerProfile(scenario: Scenario, config: PowerConfig): Po
   }
   const minSoc = Number(((minWh / config.batteryCapacityWh) * 100).toFixed(1))
   const finalSoc = steps[steps.length - 1]?.socPercent ?? 0
-  const maxAutonomyHours = Number(((config.batteryCapacityWh * (1 - config.minAllowableSocPercent / 100)) / Math.max(1, config.baseLoadWatts)).toFixed(1))
-  let summary = `Viable: SoC mínimo ${minSoc}% (reserva ≥ ${config.minAllowableSocPercent}%). Autonomía en sombra hasta reserva: ${maxAutonomyHours} h.`
+  const maxAutonomyHours = Number(((config.batteryCapacityWh * (1 - config.minAllowableSocPercent / 100) * (config.batteryDischargeEfficiency ?? 0.9)) / Math.max(1, config.baseLoadWatts + (config.shadowHeaterWatts ?? 0))).toFixed(1))
+  let summary = `El perfil estimado conserva ${minSoc}% de carga mínima con estos supuestos; falta validar panel, temperatura y cargas del vehículo.`
   if (survives && breached) {
     summary = `Alerta de reserva: cae a ${minSoc}% (bajo el umbral de ${config.minAllowableSocPercent}%), aunque no llega a 0%.`
   } else if (!survives) {
@@ -267,15 +273,13 @@ export function computeCommsProfile(scenario: Scenario, config: CommsConfig): Co
     let effMbps = 0
     let linkState: 'nominal' | 'degraded' | 'occulted' = 'occulted'
     if (s.earthVisible && clearanceDeg > 0) {
-      let linkFactor = 1.0
       if (clearanceDeg >= config.minGrazingDeg) {
         linkState = 'nominal'
         nominalSteps++
+        effMbps = config.peakDownlinkMbps
       } else {
         linkState = 'degraded'
-        linkFactor = Math.max(0.15, clearanceDeg / Math.max(config.minGrazingDeg, 0.1))
       }
-      effMbps = config.peakDownlinkMbps * diskFrac * linkFactor
     }
 
     const capGb = (effMbps * 3600 * dtHours) / 8000
@@ -313,7 +317,7 @@ export function computeCommsProfile(scenario: Scenario, config: CommsConfig): Co
   const finalGb = steps[steps.length - 1]?.bufferGb ?? 0
   const commsViable = totalDroppedGb === 0 && peakPct < 90
 
-  let summary = `Retorno de datos viable en Banda ${config.band}: bajada efectiva de ${totalDownGb.toFixed(1)} GB (media ${avgMbps} Mbps, pico SSR ${peakPct}%).`
+  let summary = `La cola simulada no se desborda con tasa supuesta en Banda ${config.band}: bajada potencial ${totalDownGb.toFixed(1)} GB (media ${avgMbps} Mbps, pico SSR ${peakPct}%). Falta presupuesto de enlace y agenda de estación.`
   if (totalDroppedGb > 0) {
     summary = `Desbordamiento de grabadora en Banda ${config.band}: se pierden ${totalDroppedGb.toFixed(2)} GB durante apagones terrestres. Aumenta SSR o Mbps.`
   } else if (peakPct >= 80) {

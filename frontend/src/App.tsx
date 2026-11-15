@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BatteryCharging, CalendarDays, Check, ChevronRight, CircleHelp, Clock3, Compass, Download, Earth, Gauge, GitCompareArrows, Layers3, MapPin, Menu, Moon, Play, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Sun, Wifi, X, Zap } from 'lucide-react'
-import { analyze, apiEnabled, askCopilot, exportScenarioCsv, fetchMissionDelta, fetchRankedSites, fetchSlope, parseNaturalConstraints, simulateCommsApi, type CopilotAskResult, type MissionDeltaResponse, type RankingResult, type SlopeResult } from './api'
+import { analyze, apiEnabled, askCopilot, exportScenarioCsv, fetchDataAvailability, fetchFootprint, fetchLinkBudget, fetchMissionDelta, fetchRankedSites, fetchSlope, parseNaturalConstraints, simulateCommsApi, type CopilotAskResult, type DataAvailability, type FootprintResult, type LinkBudgetInput, type LinkBudgetResult, type MissionDeltaResponse, type RankingResult, type SlopeResult } from './api'
 import { COMMS_PRESETS, SITES, chartPath, computeCommsProfile, computePowerProfile, emptyScenario, formatHour, metrics, verdict, type CommsConfig, type PowerConfig, type Scenario, type Site } from './data'
 import { coordinatesFromPolarMeters, isWithinPolarMap, polarMapCoordinates, polarMapPosition, polarMeters } from './polar'
 import { LocalTileMap } from './LocalTileMap'
@@ -274,12 +274,28 @@ function MissionOperationsDeck({
   const [commsPresetKey, setCommsPresetKey] = useState<string>('xband_lander')
   const [commsConfig, setCommsConfig] = useState<CommsConfig>(COMMS_PRESETS.xband_lander.config)
   const [commsApiSynced, setCommsApiSynced] = useState(false)
+  const [linkBudgetInput, setLinkBudgetInput] = useState<LinkBudgetInput>({ frequencyGhz: 8.4, rangeKm: 384400,
+    spacecraftEirpDbw: 30, groundStationGtDbk: 50, targetRateMbps: 10, otherLossesDb: 3,
+    requiredEbn0Db: 4, implementationLossDb: 2 })
+  const [linkBudget, setLinkBudget] = useState<LinkBudgetResult | null>(null)
+  const [linkBudgetError, setLinkBudgetError] = useState<string | null>(null)
   const selectCommsPreset = (key: string) => {
     setCommsPresetKey(key)
     setCommsConfig(COMMS_PRESETS[key].config)
   }
   const commsResult = useMemo(() => computeCommsProfile(scenario, commsConfig), [scenario, commsConfig])
   const currentCommsStep = commsResult.steps[Math.min(hour, Math.max(0, commsResult.steps.length - 1))]
+  useEffect(() => {
+    if (deckTab !== 'comms' || !apiEnabled) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setLinkBudget(null)
+      fetchLinkBudget({ ...linkBudgetInput, targetRateMbps: commsConfig.peakDownlinkMbps }, controller.signal)
+        .then(result => { setLinkBudget(result); setLinkBudgetError(null) })
+        .catch(error => { if (!controller.signal.aborted) setLinkBudgetError(String(error)) })
+    }, 250)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [deckTab, linkBudgetInput, commsConfig.peakDownlinkMbps])
 
   useEffect(() => {
     if (deckTab !== 'comms' || !apiEnabled || scenario.source !== 'api') {
@@ -394,7 +410,7 @@ function MissionOperationsDeck({
           <BatteryCharging size={15}/> Energía y Batería <span className={`ops-badge ${powerResult.survivesMission ? (powerResult.criticalThresholdBreached ? 'warn' : 'ok') : 'crit'}`}>{powerResult.minSocPercent.toFixed(0)}% mín</span>
         </button>
         <button type="button" role="tab" aria-selected={deckTab === 'comms'} className={deckTab === 'comms' ? 'active' : ''} onClick={() => setDeckTab('comms')}>
-          <Wifi size={15}/> Enlace DSN / Datos <span className={`ops-badge ${commsResult.commsViable ? 'ok' : commsResult.totalDroppedGb > 0 ? 'crit' : 'warn'}`}>{commsResult.totalDownlinkedGb.toFixed(0)} GB</span>
+          <Wifi size={15}/> Datos y enlace hipotético <span className={`ops-badge ${commsResult.totalDroppedGb > 0 ? 'crit' : 'warn'}`}>{commsResult.totalDownlinkedGb.toFixed(0)} GB</span>
         </button>
         <button type="button" role="tab" aria-selected={deckTab === 'delta'} className={deckTab === 'delta' ? 'active' : ''} onClick={() => setDeckTab('delta')}>
           <GitCompareArrows size={15}/> Mission Delta (Desvío / Retraso)
@@ -427,6 +443,14 @@ function MissionOperationsDeck({
           <label>
             <span>Consumo continuo <strong>{powerConfig.baseLoadWatts} W</strong></span>
             <input type="range" min="40" max="1200" step="20" value={powerConfig.baseLoadWatts} onChange={e => { setPresetKey('custom'); setPowerConfig(c => ({ ...c, baseLoadWatts: Number(e.target.value) })) }}/>
+          </label>
+          <label>
+            <span>Pérdidas por polvo, temperatura y orientación <strong>{Math.round((1 - (powerConfig.solarDerateFactor ?? 0.8)) * 100)}%</strong></span>
+            <input type="range" min="0.4" max="1" step="0.05" value={powerConfig.solarDerateFactor ?? 0.8} onChange={e => { setPresetKey('custom'); setPowerConfig(c => ({ ...c, solarDerateFactor: Number(e.target.value) })) }}/>
+          </label>
+          <label>
+            <span>Calefacción adicional en sombra <strong>{powerConfig.shadowHeaterWatts ?? 0} W</strong></span>
+            <input type="range" min="0" max="500" step="10" value={powerConfig.shadowHeaterWatts ?? 0} onChange={e => { setPresetKey('custom'); setPowerConfig(c => ({ ...c, shadowHeaterWatts: Number(e.target.value) })) }}/>
           </label>
         </div>
         <div className="power-kpis">
@@ -465,7 +489,7 @@ function MissionOperationsDeck({
             <line x1={(Math.min(hour, Math.max(1, powerResult.steps.length - 1)) / Math.max(1, powerResult.steps.length - 1)) * 600} x2={(Math.min(hour, Math.max(1, powerResult.steps.length - 1)) / Math.max(1, powerResult.steps.length - 1)) * 600} y1="0" y2="130" stroke="#f0c88d" strokeWidth="1.5"/>
           </svg>
         </div>
-        <p className="power-caption">{powerResult.summary} Modelo preliminar con panel vertical orientado al Sol (1361 W/m², eficiencia {(powerConfig.panelEfficiency * 100).toFixed(0)}%) y fracción visible del disco solar.</p>
+        <p className="power-caption">{powerResult.summary} Modelo preliminar: panel vertical orientado al Sol (1361 W/m², eficiencia {(powerConfig.panelEfficiency * 100).toFixed(0)}%), fracción visible del disco, factor de pérdidas {powerConfig.solarDerateFactor ?? 0.8} y eficiencia de batería 90%. Los perfiles son ejemplos configurables, no especificaciones oficiales de vehículos.</p>
       </div>
     </div>}
 
@@ -481,7 +505,7 @@ function MissionOperationsDeck({
         </div>
         <div className="power-sliders">
           <label>
-            <span>Tasa pico DSN (Banda {commsConfig.band}) <strong>{commsConfig.peakDownlinkMbps} Mbps</strong></span>
+            <span>Tasa pico supuesta (Banda {commsConfig.band}) <strong>{commsConfig.peakDownlinkMbps} Mbps</strong></span>
             <input type="range" min="1" max="100" step="0.5" value={commsConfig.peakDownlinkMbps} onChange={e => { setCommsPresetKey('custom'); setCommsConfig(c => ({ ...c, peakDownlinkMbps: Number(e.target.value) })) }}/>
           </label>
           <label>
@@ -494,7 +518,7 @@ function MissionOperationsDeck({
           </label>
         </div>
         <div className="power-kpis">
-          <div><small>VIABILIDAD ENLACE</small><strong className={commsResult.commsViable ? 'txt-ok' : commsResult.totalDroppedGb > 0 ? 'txt-crit' : 'txt-warn'}>{commsResult.commsViable ? 'Retorno Nominal' : commsResult.totalDroppedGb > 0 ? 'Pérdida de Datos' : 'SSR en Margen'}</strong></div>
+          <div><small>COLA CON TASA SUPUESTA</small><strong className={commsResult.totalDroppedGb > 0 ? 'txt-crit' : 'txt-warn'}>{commsResult.totalDroppedGb > 0 ? 'Pérdida de Datos' : 'Sin desborde simulado'}</strong></div>
           <div><small>BAJADA / GENERADO</small><strong>{commsResult.totalDownlinkedGb} / {commsResult.totalGeneratedGb} GB</strong></div>
           <div><small>PICO BUFFER SSR</small><strong>{commsResult.peakBufferGb} GB <small>({commsResult.peakBufferPercent}%)</small></strong></div>
           <div><small>TASA MEDIA / NOMINAL</small><strong>{commsResult.averageEffectiveMbps} Mbps · {commsResult.nominalLinkPercent}%</strong></div>
@@ -529,7 +553,19 @@ function MissionOperationsDeck({
             <line x1={(Math.min(hour, Math.max(1, commsResult.steps.length - 1)) / Math.max(1, commsResult.steps.length - 1)) * 600} x2={(Math.min(hour, Math.max(1, commsResult.steps.length - 1)) / Math.max(1, commsResult.steps.length - 1)) * 600} y1="0" y2="130" stroke="#f0c88d" strokeWidth="1.5"/>
           </svg>
         </div>
-        <p className="power-caption">{commsResult.summary} Línea azul: ocupación SSR (%); trazo verde discontinuo: tasa instantánea modulada por fracción de disco terrestre y despeje ≥ {commsConfig.minGrazingDeg}°.</p>
+        <div className="link-budget-panel">
+          <h3>Presupuesto de enlace editable</h3>
+          <p>Valores de ejemplo, no especificaciones de una estación DSN asignada. La cola anterior supone tasa pico continua cuando el centro de la Tierra supera el despeje elegido.</p>
+          <div className="link-budget-fields">
+            <label>EIRP nave (dBW)<input type="number" min="-50" max="100" step="1" value={linkBudgetInput.spacecraftEirpDbw} onChange={e => setLinkBudgetInput(v => ({ ...v, spacecraftEirpDbw: Number(e.target.value) }))}/></label>
+            <label>G/T estación (dB/K)<input type="number" min="-30" max="100" step="1" value={linkBudgetInput.groundStationGtDbk} onChange={e => setLinkBudgetInput(v => ({ ...v, groundStationGtDbk: Number(e.target.value) }))}/></label>
+            <label>Frecuencia (GHz)<input type="number" min="0.1" max="40" step="0.1" value={linkBudgetInput.frequencyGhz} onChange={e => setLinkBudgetInput(v => ({ ...v, frequencyGhz: Number(e.target.value) }))}/></label>
+            <label>Pérdidas extra (dB)<input type="number" min="0" max="50" step="0.5" value={linkBudgetInput.otherLossesDb} onChange={e => setLinkBudgetInput(v => ({ ...v, otherLossesDb: Number(e.target.value) }))}/></label>
+          </div>
+          {linkBudget ? <p><strong>Margen a {commsConfig.peakDownlinkMbps} Mbps: {linkBudget.marginDb.toFixed(1)} dB</strong> · tasa máxima calculada: {linkBudget.maxRateMbpsAtRequiredMargin.toFixed(2)} Mbps. {linkBudget.targetRateSupported ? 'La tasa cabe en el presupuesto supuesto.' : 'La tasa supera el presupuesto supuesto.'}</p> : <p>{linkBudgetError || 'Calculando margen…'}</p>}
+          <p>Sin agenda de estación, apuntamiento, clima, codificación y pruebas de radio no se puede certificar un enlace operativo.</p>
+        </div>
+        <p className="power-caption">Línea azul: ocupación SSR con la tasa supuesta; verde: tasa potencial modulada por despeje geométrico. El presupuesto de enlace es una comprobación separada.</p>
       </div>
     </div>}
 
@@ -735,8 +771,8 @@ const TOUR_STEPS = [
     desc: 'Cargamos de Gerlache Rim 2 (−88.3° S): usa LOLA 20 m/px en los primeros 5 km y 240 m para crestas lejanas.',
   },
   {
-    title: 'Paso 2/4 · Transiciones 5 min e Incertidumbre 3σ',
-    desc: 'Activamos muestreo fino (±2.5 min) y márgenes ±240 m + dispersión vertical 3σ del DEM sobre JPL Horizons.',
+    title: 'Paso 2/4 · Transiciones 5 min y sensibilidad del DEM',
+    desc: 'Activamos muestreo fino (±2.5 min) y probamos cambios ±240 m y una banda vertical supuesta del DEM. La banda no es un intervalo de confianza calibrado.',
   },
   {
     title: 'Paso 3/4 · Energía y Enlace DSN / Datos',
@@ -798,6 +834,10 @@ export default function App() {
   const [comparedSlope, setComparedSlope] = useState<SlopeResult | null>(null)
   const [comparedSlopeC, setComparedSlopeC] = useState<SlopeResult | null>(null)
   const [slopeError, setSlopeError] = useState<string | null>(null)
+  const [footprintM, setFootprintM] = useState(20)
+  const [footprint, setFootprint] = useState<FootprintResult | null>(null)
+  const [footprintError, setFootprintError] = useState<string | null>(null)
+  const [dataAvailability, setDataAvailability] = useState<DataAvailability | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [apiError, setApiError] = useState<string | null>(null)
@@ -881,6 +921,22 @@ export default function App() {
     })
     return () => controller.abort()
   }, [started, site, slopeBaseline, slopeThreshold])
+  useEffect(() => {
+    if (!started || !apiEnabled) return
+    const controller = new AbortController()
+    setFootprint(null)
+    setFootprintError(null)
+    fetchFootprint(site, footprintM, slopeThreshold, 0.5, controller.signal).then(setFootprint).catch(error => {
+      if (!controller.signal.aborted) setFootprintError(String(error))
+    })
+    return () => controller.abort()
+  }, [started, site, footprintM, slopeThreshold])
+  useEffect(() => {
+    if (!started) return
+    const controller = new AbortController()
+    fetchDataAvailability(controller.signal).then(setDataAvailability).catch(() => setDataAvailability(null))
+    return () => controller.abort()
+  }, [started, retry])
   useEffect(() => {
     if (compareId === site.id && compareDateB === date) {
       setCompareId(SITES.find(s => s.id !== site.id)!.id)
@@ -1071,7 +1127,7 @@ export default function App() {
       <div className="sidebar-section-title sites-title">CATÁLOGO POLAR SUR <span>0{SITES.length}</span></div>
       <div className="site-search"><Search size={15}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar sitio o región..." aria-label="Buscar sitios"/></div>
       <div className="site-list">{customSite && <button className={`site-item ${site.id === 'custom' ? 'active' : ''}`} onClick={() => selectSite(customSite)}><span className="site-number"><MapPin size={14}/></span><span><strong>Punto personalizado</strong><small>{Math.abs(customSite.lat).toFixed(3)}° S · {customSite.lon.toFixed(3)}° E</small></span>{site.id === 'custom' && <span className="active-indicator"/>}</button>}{filteredSites.map(item => <button key={item.id} className={`site-item ${item.id === site.id ? 'active' : ''}`} onClick={() => selectSite(item)}><span className="site-number">0{SITES.indexOf(item) + 1}</span><span><strong>{item.name}</strong><small>{item.region} {item.lat <= -87.5 ? '· DEM 20m' : ''}</small></span>{item.id === site.id && <span className="active-indicator"/>}</button>)}{filteredSites.length === 0 && <p className="empty-search">Sin resultados</p>}</div>
-      <div className="sidebar-bottom"><div className="mission-card"><span className="mini-orbit"><span/></span><small>ARTEMIS III</small><strong>South Pole<br/>Telemetry</strong><span className="mission-card-foot">JPL HORIZONS + LOLA <ArrowUpRight size={14}/></span></div><div className="sidebar-note"><CircleHelp size={15}/> Cálculos físicos verificados sin simulación falsa</div></div>
+      <div className="sidebar-bottom"><div className="mission-card"><span className="mini-orbit"><span/></span><small>ARTEMIS III</small><strong>South Pole<br/>Telemetry</strong><span className="mission-card-foot">JPL HORIZONS + LOLA <ArrowUpRight size={14}/></span></div><div className="sidebar-note"><CircleHelp size={15}/> Datos NASA y modelos con supuestos explícitos</div></div>
     </aside>
     <div className="main-shell">
       <header className="topbar">
@@ -1093,6 +1149,7 @@ export default function App() {
         </div>
       </header>
       <main className="content">
+        {dataAvailability && !dataAvailability.analysisReady && <div className="data-availability-alert" role="alert">Falta el DEM LOLA de 240 m en el servidor. El análisis topográfico no está disponible; revisa la instalación de datos.</div>}
         {calendarOpen ? <IlluminationCalendarView site={site}/> : detailOpen ? <MissionDetailView key={detailScenario ? `${detailScenario.site.id}-${detailScenario.start}` : 'empty'} scenario={detailScenario} onCompare={() => { setDetailOpen(false); setResultsOpen(true) }} onPlan={() => { setDetailOpen(false); setPlanningOpen(true) }}/> : resultsOpen ? <MissionResultsView result={missionResults} onEdit={() => { setResultsOpen(false); setPlanningOpen(true) }} onDetail={id => { const chosen = missionResults?.scenarios.find(candidate => candidate.site.id === id); if (chosen) { setDetailScenario(chosen); setResultsOpen(false); setDetailOpen(true) } }}/> : planningOpen ? <MissionPlanningView sites={SITES} initialDate={date} initialResult={missionResults} onCompared={result => { setMissionResults(result); setDetailScenario(null); setPlanningOpen(false); setResultsOpen(true) }}/> : overviewLoading ? <Suspense fallback={<div className="orbital-loading" role="status" aria-label={`Calculando ${site.name}`}/>}><OrbitalLoading siteName={tab === 'compare' ? `${site.name} y otro sitio` : site.name}/></Suspense> : <>
         <div className="page-heading">
           <div>
@@ -1146,7 +1203,7 @@ export default function App() {
             <section className="panel horizon-panel"><div className="panel-heading"><div><span className="section-kicker">02 / HORIZONTE Y OBSTÁCULOS</span><h2>Elevación local 360°</h2></div><span className="timestamp"><Clock3 size={14}/> {formatHour(date, currentHourOffset)} (H+{currentHourOffset.toFixed(1)}h)</span></div><Horizon scenario={scenario} hour={hour}/><div className="horizon-status"><span className={`status-badge ${currentSample.sunVisible ? 'good' : 'bad'}`}><Sun size={14}/>{currentSample.sunVisible ? 'Sol visible' : 'Sol oculto'}</span><span className={`status-badge ${currentSample.earthVisible ? 'good blue-badge' : 'bad'}`}><Radio size={14}/>{currentSample.earthVisible ? 'Tierra visible' : 'Tierra oculta'}</span><span className="horizon-note">Fuente: {scenario.provenance?.horizonSource}</span></div><VisibilityExplanation scenario={scenario} hour={hour}/></section>
             <section className="panel controls-panel"><div className="panel-heading"><div><span className="section-kicker">03 / PARÁMETROS OPERATIVOS</span><h2>Ventana y umbrales de misión</h2></div><Settings2 size={18} className="muted-icon"/></div><label className="field-label" htmlFor="date">FECHA DE INICIO (UTC)</label><input className="date-input" id="date" type="date" value={date} onChange={e => selectDate(e.target.value || initialDate)}/><div className="control-divider"/><div className="field-label">VENTANA Y MUESTREO</div><div className="param-grid"><label className="param-field"><span>Duración</span><select value={durationHours} onChange={e => changeDuration(Number(e.target.value) as 24 | 72 | 168 | 336)} aria-label="Duración del análisis"><option value={24}>24 h (1 día)</option><option value={72}>72 h (3 días)</option><option value={168}>168 h (7 días)</option><option value={336}>336 h (14 días)</option></select></label><label className="param-field"><span>Paso base</span><select value={stepMinutes} onChange={e => setStepMinutes(Number(e.target.value) as 60 | 30 | 15)} aria-label="Paso temporal en minutos"><option value={60}>60 min</option><option value={30} disabled={durationHours > 168}>30 min{durationHours > 168 ? ' (≤7d)' : ''}</option><option value={15} disabled={durationHours > 72}>15 min{durationHours > 72 ? ' (≤3d)' : ''}</option></select></label></div><button type="button" className={`refine-toggle-btn ${refineTransitions ? 'active' : ''}`} onClick={() => setRefineTransitions(v => !v)} aria-pressed={refineTransitions}><span>Refinar transiciones a 5 min</span><strong>{refineTransitions ? 'ACTIVO (±2.5m)' : 'OFF'}</strong></button><p className="field-hint">{scenario.provenance?.terrainSources.includes('LDEM_875S_20M') ? 'DEM 20m + 240m' : 'DEM 240m'} · Sensibilidad espacial ±{spA?.radiusM ?? 240} m</p><div className="control-divider"/><div className="field-label">MODO DE UMBRALES</div><div className="mode-toggle"><button className={mode === 'explorer' ? 'active' : ''} onClick={() => setMode('explorer')}>Estándar</button><button className={mode === 'analyst' ? 'active' : ''} onClick={() => setMode('analyst')}>Ajustar criterios</button></div>{mode === 'analyst' && <div className="analyst-fields"><label>Sol visible mínimo <strong>{minSun}%</strong><input type="range" min="0" max="100" value={minSun} onChange={e => setMinSun(Number(e.target.value))}/></label><label>Tierra visible mínimo <strong>{minEarth}%</strong><input type="range" min="0" max="100" value={minEarth} onChange={e => setMinEarth(Number(e.target.value))}/></label><label>Blackout máximo <strong>{maxBlackout} h</strong><input type="range" min="0" max="72" value={maxBlackout} onChange={e => setMaxBlackout(Number(e.target.value))}/></label><label>Umbral pendiente LOLA <strong>{slopeThreshold}°</strong><input type="range" min="2" max="30" value={slopeThreshold} onChange={e => setSlopeThreshold(Number(e.target.value))}/></label></div>}</section>
           </div>
-          <div className="metrics-heading"><div><span className="section-kicker">TELEMETRÍA DE ESCENARIO</span><h2>Métricas e incertidumbre espacial + {spA?.landingDispersionSigma ?? 3}σ DEM</h2></div><span className="period-label"><Clock3 size={15}/> {Math.round(scenario.hours / 24)} días ({scenario.provenance?.samplingMinutes ?? stepMinutes} min) · ±{spA?.radiusM ?? 240} m{spA?.demVerticalSigmaM != null ? ` · σz ${spA.demVerticalSigmaM} m (±${spA.horizonEnvelopeDeg?.toFixed(2) ?? '0'}°)` : ''}</span></div>
+          <div className="metrics-heading"><div><span className="section-kicker">TELEMETRÍA DE ESCENARIO</span><h2>Métricas y banda de sensibilidad del DEM</h2></div><span className="period-label"><Clock3 size={15}/> {Math.round(scenario.hours / 24)} días ({scenario.provenance?.samplingMinutes ?? stepMinutes} min) · ±{spA?.radiusM ?? 240} m{spA?.demVerticalSigmaM != null ? ` · σz supuesto ${spA.demVerticalSigmaM} m (±${spA.horizonEnvelopeDeg?.toFixed(2) ?? '0'}°)` : ''}</span></div>
           <div className="metric-grid">
             <MetricCard icon={<Sun size={20}/>} label="Visibilidad solar" value={m.sunPercent} suffix="%" color="amber-bg" badge={spA ? `±240m: ${spA.sunlitPercentRange[0]}–${spA.sunlitPercentRange[1]}%` : undefined} detail="Tiempo con Sol sobre el horizonte LOLA"/>
             <MetricCard icon={<Earth size={20}/>} label="Visibilidad terrestre" value={m.earthPercent} suffix="%" color="blue-bg" badge={spA ? `±240m: ${spA.earthVisiblePercentRange[0]}–${spA.earthVisiblePercentRange[1]}%` : undefined} detail="Línea de vista directa hacia la Tierra"/>
@@ -1155,7 +1212,7 @@ export default function App() {
           </div>
           <div className="lower-grid">
             <section id="mission-timeline" className="panel timeline-panel"><div className="panel-heading"><div><span className="section-kicker">04 / EVOLUCIÓN TEMPORAL</span><h2>Línea de tiempo y ventanas de transición</h2></div><span className="timeline-help"><span className="legend-dot sun"/> Sol <span className="legend-dot earth"/> Tierra · Pulsa una transición para saltar</span></div><Timeline scenario={scenario} hour={hour} onHourChange={setHour}/></section>
-            <section className="panel feasibility-panel"><div className="panel-heading"><div><span className="section-kicker">05 / EVALUACIÓN</span><h2>Restricciones operativas</h2></div><Gauge size={18} className="muted-icon"/></div><div className="feasibility-top"><div className={`score-orb ${status.feasible ? 'pass' : ''}`}>{status.count}<small>/3</small></div><div><strong>{status.feasible ? 'Cumple criterios de luz y enlace' : 'Revisar restricciones'}</strong><span>{status.count} de 3 condiciones satisfechas (no certifica aterrizaje)</span></div></div><div className="criteria-list"><div><span className={status.passed[0] ? 'criteria-ok' : 'criteria-no'}>{status.passed[0] ? <Check size={13}/> : <X size={13}/>}</span> Luz solar ≥ {minSun}% <strong>{m.sunPercent}%</strong></div><div><span className={status.passed[1] ? 'criteria-ok' : 'criteria-no'}>{status.passed[1] ? <Check size={13}/> : <X size={13}/>}</span> Tierra visible ≥ {minEarth}% <strong>{m.earthPercent}%</strong></div><div><span className={status.passed[2] ? 'criteria-ok' : 'criteria-no'}>{status.passed[2] ? <Check size={13}/> : <X size={13}/>}</span> Blackout ≤ {maxBlackout} h <strong>{m.longestBlackout} h</strong></div></div><button className="text-button" onClick={() => setMode(mode === 'analyst' ? 'explorer' : 'analyst')}>{mode === 'analyst' ? 'Ocultar controles de criterios' : 'Ajustar criterios manualmente'} <ArrowRight size={15}/></button></section>
+            <section className="panel feasibility-panel"><div className="panel-heading"><div><span className="section-kicker">05 / EVALUACIÓN</span><h2>Restricciones operativas</h2></div><Gauge size={18} className="muted-icon"/></div><div className="feasibility-top"><div className={`score-orb ${status.feasible ? 'pass' : ''}`}>{status.count}<small>/3</small></div><div><strong>{status.feasible ? 'Cumple criterios de luz y visibilidad terrestre' : 'Revisar restricciones'}</strong><span>{status.count} de 3 condiciones satisfechas (no certifica aterrizaje ni radioenlace)</span></div></div><div className="criteria-list"><div><span className={status.passed[0] ? 'criteria-ok' : 'criteria-no'}>{status.passed[0] ? <Check size={13}/> : <X size={13}/>}</span> Luz solar ≥ {minSun}% <strong>{m.sunPercent}%</strong></div><div><span className={status.passed[1] ? 'criteria-ok' : 'criteria-no'}>{status.passed[1] ? <Check size={13}/> : <X size={13}/>}</span> Tierra visible ≥ {minEarth}% <strong>{m.earthPercent}%</strong></div><div><span className={status.passed[2] ? 'criteria-ok' : 'criteria-no'}>{status.passed[2] ? <Check size={13}/> : <X size={13}/>}</span> Blackout ≤ {maxBlackout} h <strong>{m.longestBlackout} h</strong></div></div><button className="text-button" onClick={() => setMode(mode === 'analyst' ? 'explorer' : 'analyst')}>{mode === 'analyst' ? 'Ocultar controles de criterios' : 'Ajustar criterios manualmente'} <ArrowRight size={15}/></button></section>
           </div>
           <MissionOperationsDeck
             scenario={scenario} date={date} hour={hour} onHourChange={setHour}
@@ -1169,6 +1226,18 @@ export default function App() {
             }}
           />
           <RegionalSlopeCard slope={slope} error={slopeError} baselinePixels={slopeBaseline} onBaselineChange={setSlopeBaseline} thresholdDeg={slopeThreshold} onThresholdChange={setSlopeThreshold}/>
+          <section className="panel footprint-panel" aria-label="Relieve local de huella NAC">
+            <div className="panel-heading"><div><span className="section-kicker">08 / EVIDENCIA LOCAL</span><h2>Huella y rugosidad NAC estéreo</h2></div><span>DTM 2 m/px cuando hay cobertura</span></div>
+            <label className="footprint-control">Ancho de huella analizada: <strong>{footprintM} m</strong>
+              <input type="range" min="10" max="100" step="10" value={footprintM} onChange={event => setFootprintM(Number(event.target.value))}/>
+            </label>
+            {footprint?.status === 'measured_not_certified' ? <div className="footprint-metrics">
+              <div><small>PENDIENTE DEL PLANO</small><strong>{footprint.slopeDeg?.toFixed(1)}°</strong><span>{footprint.slopeExceedsLimit ? 'Supera' : 'Bajo'} umbral elegido de {slopeThreshold}°</span></div>
+              <div><small>RUGOSIDAD RESIDUAL RMS</small><strong>{footprint.roughnessRmsM?.toFixed(2)} m</strong><span>{footprint.roughnessExceedsLimit ? 'Supera' : 'Bajo'} umbral exploratorio de 0,5 m</span></div>
+              <div><small>COBERTURA DE LA HUELLA</small><strong>{Math.round(footprint.coverageFraction * 100)}%</strong><span>{footprint.source} · {footprint.resolutionM} m/px</span></div>
+            </div> : <p>{footprintError ? `Evaluación local no disponible: ${footprintError}` : footprint ? 'Sin DTM NAC estéreo suficiente para esta coordenada y huella.' : 'Consultando cobertura del DTM NAC…'}</p>}
+            <p className="slope-disclaimer">{footprint?.note || 'La fotografía NAC y la pendiente LOLA regional no revelan por sí solas los peligros de la huella.'} Rocas y resistencia del suelo: sin evaluar. Ningún resultado certifica un aterrizaje.</p>
+          </section>
           <Suspense fallback={<p className="terrain-3d-message">Cargando visor 3D…</p>}><Terrain3D site={site} sample={currentSample}/></Suspense>
         </> : <div className="compare-page-stack">
           <div className="compare-layout">
@@ -1282,7 +1351,7 @@ export default function App() {
                     tie: !compareCEnabled && Math.abs(slope.slopeDeg - comparedSlope.slopeDeg) < 1.0,
                   }] : []),
                   {
-                    name: 'DEM e incertidumbre 3σ',
+                    name: 'DEM y banda de sensibilidad',
                     vals: [
                       scenario.provenance?.terrainSources.join(' + ') || 'LOLA 240m',
                       compared.provenance?.terrainSources.join(' + ') || 'LOLA 240m',
@@ -1300,7 +1369,7 @@ export default function App() {
                   const activeNums = compareCEnabled ? row.nums : row.nums.slice(0, 2)
                   const bestVal = Math.max(...activeNums)
                   return <div className="table-row" key={row.name}>
-                    <span>{row.name} {row.tie && activeNums[0] !== activeNums[1] && <em className="tie-badge" title="Los rangos ±240 m + 3σ se solapan">Empate técnico (±240m)</em>}</span>
+                    <span>{row.name} {row.tie && activeNums[0] !== activeNums[1] && <em className="tie-badge" title="Las bandas de sensibilidad se solapan; no equivalen a confianza estadística calibrada">Empate técnico (±240m)</em>}</span>
                     {(compareCEnabled ? [0, 1, 2] : [0, 1]).map(colIdx => {
                       const isWin = !row.tie && activeNums[colIdx] === bestVal && activeNums.filter(v => v === bestVal).length === 1
                       return <strong key={colIdx} className={isWin ? 'winner' : ''}>
@@ -1315,7 +1384,7 @@ export default function App() {
             <section className="panel compare-aside">
               <span className="section-kicker">DECISIÓN BAJO INCERTIDUMBRE</span>
               <h2>Balance entre candidatos</h2>
-              <p>Las diferencias pequeñas cuyos márgenes espaciales (±240 m + 3σ DEM) se solapan no declaran ganador único.</p>
+              <p>Las diferencias pequeñas cuyas bandas de sensibilidad se solapan no declaran ganador único. Las bandas verticales no están calibradas como intervalos de confianza para todos los sitios.</p>
               <div className="compare-mini"><span><Sun size={17}/> Ventaja solar</span><strong>{!compareCEnabled && rangesOverlap(spA?.sunlitPercentRange, spB?.sunlitPercentRange) ? 'Solapado en ±240 m' : (compareCEnabled && compareMetricsC.sunPercent >= Math.max(m.sunPercent, compareMetrics.sunPercent) ? `${comparedC.site.name} (${compareDateC})` : m.sunPercent >= compareMetrics.sunPercent ? `${site.name} (${date})` : `${compared.site.name} (${compareDateB})`)} <ArrowDownRight size={15}/></strong></div>
               <div className="compare-mini"><span><Radio size={17}/> Ventaja enlace</span><strong>{!compareCEnabled && rangesOverlap(spA?.earthVisiblePercentRange, spB?.earthVisiblePercentRange) ? 'Solapado en ±240 m' : (compareCEnabled && compareMetricsC.earthPercent >= Math.max(m.earthPercent, compareMetrics.earthPercent) ? `${comparedC.site.name} (${compareDateC})` : m.earthPercent >= compareMetrics.earthPercent ? `${site.name} (${date})` : `${compared.site.name} (${compareDateB})`)} <ArrowDownRight size={15}/></strong></div>
               <div className="compare-mini"><span><ShieldCheck size={17}/> Criterios cumplidos</span><strong>{verdict(m, minSun, minEarth, maxBlackout).count}/3 · {verdict(compareMetrics, minSun, minEarth, maxBlackout).count}/3{compareCEnabled ? ` · ${verdict(compareMetricsC, minSun, minEarth, maxBlackout).count}/3` : ''}</strong></div>

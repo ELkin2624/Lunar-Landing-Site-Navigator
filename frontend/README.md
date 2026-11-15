@@ -24,6 +24,8 @@ Puedes pulsar cualquier punto del mapa o escribir latitud y longitud en el formu
 
 Por defecto se consulta el backend. Ejecuta FastAPI antes de abrir el frontend; `.env.example` muestra la configuración opcional. El cliente consulta `POST /api/scenarios/analyze`, usa las métricas de FastAPI y pide horizonte LOLA. Si falla, muestra el error y **no sustituye las métricas por datos simulados**. En desarrollo, Vite redirige `/api` a `http://localhost:8000`. Para otro destino, configura `VITE_API_BASE_URL`.
 
+El explorador ahora distingue pendiente regional LOLA de una **huella local NAC estéreo** de 2 m. La huella informa pendiente del plano, rugosidad residual y cobertura, y muestra «sin datos» fuera de los dos DTM disponibles. No detecta rocas ni certifica aterrizaje. El panel de energía permite variar pérdidas solares y calefacción en sombra. La sección de comunicaciones añade un presupuesto RF editable; el volumen de datos sigue siendo una hipótesis de contacto continuo cuando la Tierra es visible, no una agenda DSN confirmada. El visor 3D permite descargar un diagnóstico local de FPS y carga para pruebas en teléfonos físicos. El protocolo está en [`docs/PREPARACION_PUBLICA.md`](../docs/PREPARACION_PUBLICA.md).
+
 Solicitud esperada:
 
 ```json

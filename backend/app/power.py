@@ -14,6 +14,10 @@ class PowerConfig(BaseModel):
     battery_capacity_wh: float = Field(default=2500.0, ge=50.0, le=100000.0, description="Total usable battery energy capacity in Watt-hours")
     initial_soc_percent: float = Field(default=100.0, ge=0.0, le=100.0, description="Initial State of Charge (%)")
     min_allowable_soc_percent: float = Field(default=20.0, ge=0.0, le=50.0, description="Critical discharge reserve threshold (%)")
+    solar_derate_factor: float = Field(default=0.8, ge=0.1, le=1.0, description="Combined dust, temperature, wiring and pointing derate")
+    shadow_heater_watts: float = Field(default=0.0, ge=0, le=5000, description="Additional heater load when the Sun is blocked")
+    battery_charge_efficiency: float = Field(default=0.9, ge=0.5, le=1.0)
+    battery_discharge_efficiency: float = Field(default=0.9, ge=0.5, le=1.0)
 
 
 class PowerStep(BaseModel):
@@ -36,6 +40,8 @@ class PowerSimulationResult(BaseModel):
     critical_threshold_breached: bool
     blackout_hours_supported: float
     summary: str
+    vehicle_system_verified: bool = False
+    assumption_note: str = "Perfil eléctrico condicional; requiere cargas, orientación, datos térmicos y ensayos del vehículo real."
     steps: list[PowerStep]
 
 
@@ -70,7 +76,7 @@ def simulate_power(result: ScenarioResult, config: PowerConfig) -> PowerSimulati
         
         # Vertical solar panel oriented azimuthally towards Sun (common design for lunar south pole)
         # Power is proportional to cosine of elevation (since sun is at horizontal incidence)
-        if s.sun.visible and el_deg > s.sun.horizon_deg:
+        if disk_frac > 0:
             cos_factor = max(0.0, math.cos(math.radians(max(0.0, el_deg))))
             power_gen = (
                 LUNAR_SOLAR_CONSTANT_W_M2
@@ -78,12 +84,14 @@ def simulate_power(result: ScenarioResult, config: PowerConfig) -> PowerSimulati
                 * config.panel_efficiency
                 * cos_factor
                 * disk_frac
+                * config.solar_derate_factor
             )
         else:
             power_gen = 0.0
 
-        net_w = power_gen - config.base_load_watts
-        delta_wh = net_w * dt_hours
+        load_w = config.base_load_watts + (config.shadow_heater_watts if disk_frac <= 0 else 0.0)
+        net_w = power_gen - load_w
+        delta_wh = net_w * dt_hours * (config.battery_charge_efficiency if net_w >= 0 else 1 / config.battery_discharge_efficiency)
 
         # Update battery
         new_wh = min(config.battery_capacity_wh, max(0.0, current_wh + delta_wh))
@@ -91,7 +99,7 @@ def simulate_power(result: ScenarioResult, config: PowerConfig) -> PowerSimulati
         min_wh = min(min_wh, current_wh)
 
         total_gen_wh += power_gen * dt_hours
-        total_load_wh += config.base_load_watts * dt_hours
+        total_load_wh += load_w * dt_hours
 
         soc = (current_wh / config.battery_capacity_wh) * 100.0
         if soc < config.min_allowable_soc_percent:
@@ -115,9 +123,9 @@ def simulate_power(result: ScenarioResult, config: PowerConfig) -> PowerSimulati
     final_soc = steps[-1].soc_percent if steps else 0.0
 
     if survives and not breached:
-        summary = f"Misión energéticamente viable. La batería mantuvo un SoC mínimo de {min_soc}% (por encima del umbral de seguridad de {config.min_allowable_soc_percent}%)."
+        summary = f"El perfil energético estimado conserva {min_soc}% de carga mínima con estos supuestos; falta validar panel, temperatura y cargas del vehículo."
     elif survives and breached:
-        summary = f"Misión en riesgo térmico/eléctrico: la batería sobrevivió pero cayó a {min_soc}%, por debajo de la reserva crítica ({config.min_allowable_soc_percent}%)."
+        summary = f"La carga estimada cae a {min_soc}%, bajo la reserva configurada ({config.min_allowable_soc_percent}%)."
     else:
         summary = f"Fallo por agotamiento energético: la batería se descargó por completo durante la noche/sombra lunar."
 
@@ -129,7 +137,7 @@ def simulate_power(result: ScenarioResult, config: PowerConfig) -> PowerSimulati
         total_energy_generated_kwh=round(total_gen_wh / 1000.0, 3),
         total_energy_consumed_kwh=round(total_load_wh / 1000.0, 3),
         critical_threshold_breached=breached,
-        blackout_hours_supported=round(result.metrics.longest_darkness_hours, 1),
+        blackout_hours_supported=round(config.battery_capacity_wh * (1 - config.min_allowable_soc_percent / 100) * config.battery_discharge_efficiency / max(1, config.base_load_watts + config.shadow_heater_watts), 1),
         summary=summary,
         steps=steps,
     )

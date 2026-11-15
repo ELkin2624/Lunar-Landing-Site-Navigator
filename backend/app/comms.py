@@ -40,6 +40,8 @@ class CommsSimulationResult(BaseModel):
     final_buffer_gb: float
     average_effective_mbps: float
     summary: str
+    operational_link_verified: bool = False
+    assumption_note: str = "Tasa pico solo si el centro de la Tierra supera el despeje elegido; sin ubicación ni agenda de estación, presupuesto RF o enlace confirmado. La fracción del disco terrestre no multiplica los Mbps."
     steps: list[CommsStep]
 
 
@@ -71,14 +73,12 @@ def simulate_comms(result: ScenarioResult, config: CommsConfig) -> CommsSimulati
 
         if s.earth.visible and clearance_deg > 0.0:
             if clearance_deg >= config.min_grazing_deg:
-                link_factor = 1.0
                 link_state: Literal["nominal", "degraded", "occulted"] = "nominal"
                 nominal_steps += 1
+                eff_mbps = config.peak_downlink_mbps
             else:
-                denom = max(config.min_grazing_deg, 0.1)
-                link_factor = max(0.15, clearance_deg / denom)
                 link_state = "degraded"
-            eff_mbps = config.peak_downlink_mbps * disk_frac * link_factor
+                eff_mbps = 0.0
         else:
             eff_mbps = 0.0
             link_state = "occulted"
@@ -131,8 +131,9 @@ def simulate_comms(result: ScenarioResult, config: CommsConfig) -> CommsSimulati
         )
     else:
         summary = (
-            f"Retorno de datos viable en Banda {config.band}: bajada efectiva de {total_down_gb:.1f} GB "
-            f"(media {avg_mbps} Mbps, pico SSR {peak_pct}%)."
+            f"La cola simulada no se desborda con tasa supuesta en Banda {config.band}: "
+            f"bajada potencial {total_down_gb:.1f} GB (media {avg_mbps} Mbps, pico SSR {peak_pct}%). "
+            "No se comprobó presupuesto de enlace ni agenda de estación terrestre."
         )
 
     return CommsSimulationResult(

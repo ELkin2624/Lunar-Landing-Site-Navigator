@@ -18,7 +18,8 @@ La experiencia combinará la propuesta educativa y de exploración 3D del equipo
 | Recurso | Función | Estado |
 | --- | --- | --- |
 | JPL Horizons | Efemérides topocéntricas del Sol y la Tierra | Integrado en FastAPI |
-| NASA PDS LOLA | Elevación, perfil topográfico del horizonte y pendiente regional multiescala | DEM `LDEM_75S_240M` (240 m/píxel) integrado para horizonte y pendiente regional preliminar |
+| NASA PDS LOLA | Elevación, perfil topográfico del horizonte y pendiente regional multiescala | DEM de 20 m cerca del polo donde hay cobertura y 240 m para obstáculos lejanos; evaluación regional |
+| LROC NAC estéreo PDS | Relieve local independiente para validar LOLA y medir una huella | Dos DTM de 2 m integrados con cobertura limitada; pendiente y rugosidad sin certificación de seguridad |
 | NASA Moon Trek | Cartografía georreferenciada y capas polares (`IAU2000::30120`) | WAC polar incluido; zoom consulta NAC y relieve LOLA de 5 m donde hay cobertura. La foto no muestra sombras de la fecha elegida |
 | Blender | Luna y escenas 3D para exploración y explicación | `luna_cientifica.glb` integrado en visor; no es fuente de elevación científica |
 
@@ -26,9 +27,9 @@ Horizons, LOLA y Moon Trek son recursos diferentes. El modelo de Blender es una 
 
 ## Estado comprobado en el repositorio
 
-- Backend FastAPI con contratos Pydantic, consulta a Horizons, caché SQLite, catálogo de sitios, horizonte LOLA, pendiente regional multiescala, malla de terreno para visualización 3D (`/api/v1/terrain/mesh`), línea temporal, comparación, ranking, Mission Delta, energía preliminar y exportación CSV con procedencia e incertidumbre temporal.
+- Backend FastAPI con contratos Pydantic, Horizons, caché SQLite, catálogo de sitios, horizonte LOLA mixto, pendiente regional, evaluación local NAC, malla 3D, línea temporal, comparación, ranking, Mission Delta, energía configurable, presupuesto RF condicional y CSV con procedencia y banda de sensibilidad.
 - Frontend React/TypeScript con explorador y comparación conectados a la API, capas LOLA/LROC WAC y teselas locales NAC/LOLA de Moon Trek, selección de coordenadas, panel de pendiente regional, perfil local LOLA y visor 3D con el globo Blender del equipo y malla local del DEM.
-- Los resultados científicos actuales son estimaciones para planificación y educación. La visibilidad directa de la Tierra no certifica un enlace de radio, la simulación eléctrica no certifica el sistema de energía y una pendiente calculada con el DEM de 240 m/píxel solo sirve como evaluación regional preliminar (`10°` no es un umbral universal de aterrizaje; los límites dependen del vehículo y de cómo se mida la pendiente, véase [NASA OIG IG-26-004](https://oig.nasa.gov/wp-content/uploads/2026/03/final-report-ig-26-004-nasas-management-of-the-human-landing-system-contracts.pdf)).
+- Los resultados actuales son estimaciones para planificación y educación. La visibilidad directa de la Tierra no certifica un enlace de radio, el presupuesto RF requiere parámetros y agenda de estación reales, la simulación eléctrica no certifica el vehículo y ni la pendiente regional LOLA ni la huella NAC de 2 m constituyen evaluación completa de seguridad. Los límites dependen del vehículo y de la escala de medición; véase [NASA OIG IG-26-004](https://oig.nasa.gov/wp-content/uploads/2026/03/final-report-ig-26-004-nasas-management-of-the-human-landing-system-contracts.pdf).
 
 ## Contrato del producto
 
@@ -45,11 +46,11 @@ Horizons, LOLA y Moon Trek son recursos diferentes. El modelo de Blender es una 
 
 ### Orden de implementación
 
-1. **Coherencia temporal y validación científica.** Exploración densa e informes reproducibles de sensibilidad 60/15/5 min, degradación 480/960 m y comparación con el producto LOLA de 20 m. Un contraste con NAIF SPICE y la órbita independiente INPOP19a verifica seis posiciones. Falta una orientación lunar y topografía independientes, además de validación de ventanas completas.
+1. **Coherencia temporal y validación científica.** Completadas pruebas de sensibilidad 60/15/5 min, LOLA 20/240 m, DTMs NAC independientes, órbita INPOP19a y orientación lunar alternativa; la matriz estacional abarca cinco sitios y cuatro fechas. La banda vertical de 240 m no está calibrada como confianza estadística. Faltan más DTMs, lugares y contrastes operativos.
 2. **Integración frontend–backend.** Sitios de muestra, punto personalizado, horizonte, pendiente y terreno 3D conectados. Las exportaciones conservan procedencia, resolución y amplitud del intervalo de transición.
 3. **Cartografía.** WAC y LOLA polares, zoom con NAC/LOLA local y avisos de ausencia de cobertura integrados. El portal Moon Trek se abre desde la tarjeta del sitio; el enlace profundo generado no conservó centro ni zoom en una prueba de apertura y se retiró. Falta navegación libre del centro.
-4. **Visualización Blender.** GLB de Luna, Sol y Tierra integrados con direcciones aparentes de Horizons. La malla local usa 20 m donde hay cobertura y 240 m en el resto, con textura WAC alineada pero de baja resolución. Falta optimizar los GLB y añadir una textura local de mayor resolución con licencia y cobertura verificadas.
-5. **Evaluación de misión y presentación.** Pendiente regional, luz y enlace explicados como criterios separados; falta ampliar requisitos específicos por vehículo, energía y comunicaciones y preparar narrativa de demostración.
+4. **Visualización Blender.** GLB de Luna, Sol y Tierra integrados con direcciones aparentes de Horizons. Modelos LOD y textura NAC local donde hay cobertura; telemetría FPS descargable. Falta medir teléfonos físicos.
+5. **Evaluación de misión y presentación.** Huella NAC, energía con pérdidas y calefacción, y presupuesto RF con parámetros editables integrados. Faltan ensayos específicos de vehículo, agenda real de estación, evaluación de rocas/suelo y prueba de comprensión con personas.
 
 ### Criterios de aceptación de la demostración
 

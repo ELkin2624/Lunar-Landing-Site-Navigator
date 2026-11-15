@@ -16,7 +16,9 @@ py -3.12 -m venv .venv
 .venv\Scripts\python -m uvicorn app.main:app --reload
 ```
 
-API en `http://127.0.0.1:8000`; documentación interactiva en `/docs`. Se requiere conexión a JPL Horizons para evaluar escenarios. `GET /health` solo comprueba que el proceso responde. La descarga de LOLA es pública y **no requiere API key**. `--highres` descarga además 115 MB del producto `LDEM_875S_20M`, que cubre desde 87,5° S hasta el polo; se usa para la malla 3D local cuando la ventana de 2 km cabe dentro de su cobertura.
+API en `http://127.0.0.1:8000`; documentación interactiva en `/docs`. Se requiere conexión a JPL Horizons para evaluar escenarios. `GET /health` solo comprueba que el proceso responde. `GET /api/v1/data/availability` indica qué raster están instalados sin prometer que las fuentes remotas respondan. La descarga de LOLA es pública y **no requiere API key**. `--highres` descarga además 115 MB del producto `LDEM_875S_20M`, que cubre desde 87,5° S hasta el polo; se usa para el horizonte cercano, la pendiente y la malla 3D local donde hay cobertura.
+
+Antes de publicar, ejecuta `.venv\Scripts\python scripts/verify_assets.py --strict` para comprobar DEM y DTM NAC locales. La matriz estacional reproducible se genera con `scripts/validate_seasons.py` y se explica en [`docs/VALIDACION_CIENTIFICA.md`](../docs/VALIDACION_CIENTIFICA.md). Los requisitos para una prueba pública están en [`docs/PREPARACION_PUBLICA.md`](../docs/PREPARACION_PUBLICA.md).
 
 El backend lee automáticamente `backend/.env` si existe. Puedes copiar `.env.example`. `LUNARPATH_DEM_PATH` permite usar otra ubicación del mismo producto; `LUNARPATH_CORS_ORIGINS` define una lista de orígenes del frontend separada por comas. Ninguna clave de NASA va en `.env` para este módulo.
 
@@ -39,7 +41,9 @@ El backend lee automáticamente `backend/.env` si existe. Puedes copiar `.env.ex
 - `POST /api/v1/scenarios/rank`: comparador avanzado con sistema de puntuación ponderada (0–100), ranking, fortalezas (highlights) y compromisos (trade-offs).
 - `POST /api/v1/terrain/horizon`: perfil de horizonte LOLA a medida para cualquier coordenada polar.
 - `POST /api/v1/terrain/slope`: pendiente regional LOLA (operador de Horn 3×3 corregido por factor de escala estereográfico polar, bases efectivas de ~480 m, ~960 m y ~1920 m, estadísticas circulares y comparación contra un umbral configurable por el usuario sin clasificar ningún punto como «aterrizaje seguro»).
-- `POST /api/v1/terrain/mesh`: malla local de 101 × 101 celdas a 20 m/píxel donde hay cobertura, o de 41 × 41 celdas a 240 m/píxel en el resto. Devuelve cotas, espaciado, centro proyectado, fuente y proyección. El horizonte y la pendiente regional del análisis principal siguen usando 240 m/píxel.
+- `POST /api/v1/terrain/mesh`: malla local de 101 × 101 celdas a 20 m/píxel donde hay cobertura, o de 41 × 41 celdas a 240 m/píxel en el resto. Devuelve cotas, espaciado, centro proyectado, fuente y proyección.
+- `POST /api/v1/terrain/footprint`: pendiente del plano y rugosidad residual en huella configurable con DTM estéreo LROC NAC de 2 m donde hay cobertura. Devuelve `unknown` fuera de cobertura; rocas y suelo quedan sin evaluar.
+- `POST /api/v1/comms/link-budget`: presupuesto RF condicional con EIRP, G/T, frecuencia, distancia, pérdidas y Eb/N0 requeridos. No confirma agenda de estación ni enlace operativo.
 
 ### 4. Mission Delta (Diferenciador Clave)
 - `POST /api/v1/scenarios/delta`: analiza el impacto operativo de reprogramaciones de misión (retraso en días/horas) o desplazamientos espaciales del alunizaje (distancia en metros y rumbo en azimut), calculando variaciones en iluminación, comunicación, noches máximas y nivel de riesgo ("LOW", "MODERATE", "CRITICAL").

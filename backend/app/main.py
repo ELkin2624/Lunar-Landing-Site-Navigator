@@ -19,7 +19,9 @@ from .catalog import CatalogSite, find_site, list_sites
 from .comms import CommsSimulationRequest, CommsSimulationResult, simulate_comms
 from .copilot import CopilotRequest, CopilotResponse, diagnose_scenario, parse_natural_constraints
 from .delta import MissionDeltaRequest, MissionDeltaResult, compute_mission_delta, shift_lunar_coordinates
+from .footprint import FootprintRequest, FootprintResult, assess_footprint
 from .horizons import HorizonsClient, HorizonsError
+from .link_budget import LinkBudgetRequest, LinkBudgetResult, calculate_link_budget
 from .mesh import MeshRequest, MeshResult, terrain_mesh
 from .nac_texture import build_texture_with_meta
 from .models import (
@@ -97,6 +99,29 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/v1/data/availability", tags=["Status"])
+def data_availability(request: Request) -> dict:
+    """Report installed scientific assets, without claiming remote service uptime."""
+    broad = request.app.state.dem
+    fine = request.app.state.fine_dem
+    nac_dir = BACKEND_DIR / "data" / "nac_dtm"
+    products = sorted(path.stem for path in nac_dir.glob("NAC_DTM_*.TIF") if path.is_file())
+    return {
+        "analysis_ready": broad is not None,
+        "horizons_status": "checked_per_request",
+        "dem_240m": broad is not None,
+        "dem_20m": fine is not None,
+        "nac_stereo_products": products,
+        "nac_local_coverage": "limited_to_product_footprints",
+        "note": "La disponibilidad de Horizons y Moon Trek se comprueba al solicitar cada análisis o tesela.",
+    }
+
+
+@app.post("/api/v1/comms/link-budget", response_model=LinkBudgetResult, tags=["Communications"])
+def link_budget(payload: LinkBudgetRequest) -> LinkBudgetResult:
+    return calculate_link_budget(payload)
+
+
 # ---------------------------------------------------------------------------
 # Catalog endpoints (Official Artemis candidate landing regions & polar sites)
 # ---------------------------------------------------------------------------
@@ -123,6 +148,11 @@ def get_catalog_site(site_id: str) -> CatalogSite:
 # ---------------------------------------------------------------------------
 # Terrain Horizon endpoint (LOLA DEM)
 # ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/terrain/footprint", response_model=FootprintResult, tags=["Terrain"])
+async def terrain_footprint(payload: FootprintRequest) -> FootprintResult:
+    return await run_in_threadpool(assess_footprint, payload, BACKEND_DIR / "data" / "nac_dtm")
 
 
 @app.post("/api/v1/terrain/mesh", response_model=MeshResult, tags=["Terrain"])
@@ -473,15 +503,16 @@ async def evaluate(scenario: Scenario, horizons: HorizonsClient, dem: LolaDem | 
             "landing_dispersion_sigma": dem_stats["landing_dispersion_sigma"],
             "horizon_elevation_sigma_deg": dem_stats["horizon_elevation_sigma_deg"],
             "horizon_envelope_deg": dem_stats["horizon_envelope_deg"],
+            "confidence_calibrated": False,
             "sunlit_percent_range": bounds("sunlit_fraction", 100),
             "earth_visible_percent_range": bounds("earth_visible_fraction", 100),
             "longest_darkness_hours_range": bounds("longest_darkness_hours"),
             "longest_earth_blackout_hours_range": bounds("longest_earth_blackout_hours"),
             "method": (
                 f"Center + 4 cardinal offsets (±{scenario.spatial_uncertainty_radius_m:g}m, Horizons recomputed per offset) "
-                f"+ {dem_stats['landing_dispersion_sigma']:g}-sigma DEM vertical RMSE propagation ({dem_stats['dem_vertical_sigma_m']}m -> median ±{dem_stats['horizon_envelope_deg']}°)."
+                f"+ {dem_stats['landing_dispersion_sigma']:g}-sigma conditional DEM vertical band ({dem_stats['dem_vertical_sigma_m']}m -> median ±{dem_stats['horizon_envelope_deg']}°); not calibrated as confidence interval."
                 if all_recomputed
-                else f"Center + cardinal offsets + {dem_stats['landing_dispersion_sigma']:g}-sigma DEM vertical propagation ({dem_stats['dem_vertical_sigma_m']}m); center Horizons reused where offset failed."
+                else f"Center + cardinal offsets + {dem_stats['landing_dispersion_sigma']:g}-sigma conditional DEM vertical band ({dem_stats['dem_vertical_sigma_m']}m); not calibrated, center Horizons reused where offset failed."
             ),
         }
     return result
@@ -652,6 +683,7 @@ async def export_scenario_csv(scenario: Scenario, request: Request) -> Response:
         "dem_vertical_sigma_m",
         "landing_dispersion_sigma",
         "horizon_envelope_deg",
+        "confidence_calibrated",
         "sunlit_percent_range",
         "earth_visible_percent_range",
         "spatial_method",
@@ -701,6 +733,7 @@ async def export_scenario_csv(scenario: Scenario, request: Request) -> Response:
             uncertainty.get("dem_vertical_sigma_m", ""),
             uncertainty.get("landing_dispersion_sigma", ""),
             uncertainty.get("horizon_envelope_deg", ""),
+            uncertainty.get("confidence_calibrated", ""),
             uncertainty.get("sunlit_percent_range", ""),
             uncertainty.get("earth_visible_percent_range", ""),
             uncertainty.get("method", ""),

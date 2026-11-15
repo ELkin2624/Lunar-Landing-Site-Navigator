@@ -47,7 +47,11 @@
         "azimuths_evaluated": 36,
         "mean_horizon_abs_diff_vs_lola_240m_deg": 2.796,
         "mean_horizon_abs_diff_vs_lola_20m_deg": 0.248,
-        "p95_horizon_abs_diff_vs_lola_20m_deg": 0.509
+        "p95_horizon_abs_diff_vs_lola_20m_deg": 0.509,
+        "fraction_nac_horizon_within_3sigma_20m": 1.0,
+        "fraction_nac_horizon_within_3sigma_240m": 0.667,
+        "median_3sigma_envelope_20m_deg": 1.605,
+        "median_3sigma_envelope_240m_deg": 2.913
       }
     },
     {
@@ -81,7 +85,11 @@
         "azimuths_evaluated": 36,
         "mean_horizon_abs_diff_vs_lola_240m_deg": 4.589,
         "mean_horizon_abs_diff_vs_lola_20m_deg": null,
-        "p95_horizon_abs_diff_vs_lola_20m_deg": null
+        "p95_horizon_abs_diff_vs_lola_20m_deg": null,
+        "fraction_nac_horizon_within_3sigma_20m": null,
+        "fraction_nac_horizon_within_3sigma_240m": 0.444,
+        "median_3sigma_envelope_20m_deg": null,
+        "median_3sigma_envelope_240m_deg": 2.911
       }
     }
   ],

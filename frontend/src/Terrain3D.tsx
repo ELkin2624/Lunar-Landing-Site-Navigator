@@ -69,6 +69,20 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   const qualityRef = useRef<Quality>('auto')
   const adaptiveLow = useRef(false)
   const highDetailGlobe = view === 'globe' && quality === 'high'
+  const downloadTelemetry = () => {
+    const report = { recordedAtUtc: new Date().toISOString(), userAgent: navigator.userAgent,
+      viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+      site: { latitudeDeg: site.lat, longitudeDeg: site.lon }, view, quality,
+      measuredFps, adaptiveResolution: adaptiveLow.current, ...perfTelemetry,
+      mesh: mesh ? { source: mesh.source, gridSize: mesh.gridSize, spacingM: mesh.gridSpacingM } : null,
+      texture: textureInfo ? { pixelM: textureInfo.pixelM, coverage: textureInfo.coverage } : null }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `lunarpath-3d-${Date.now()}.json`
+    anchor.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
 
   useEffect(() => {
     qualityRef.current = quality
@@ -308,7 +322,7 @@ export function Terrain3D({ site, sample }: { site: Site; sample: Sample }) {
   return <section id="mission-3d" className="panel terrain-3d-panel">
     <div className="panel-heading"><div><span className="section-kicker">07 / EXPLORACIÓN ESPACIAL</span><h2>Relieve 3D y cuerpos celestes</h2></div><div className="terrain-view-toggle" role="group" aria-label="Vista tridimensional"><button className={view === 'local' ? 'active' : ''} onClick={() => setView('local')}>Terreno LOLA</button><button className={view === 'globe' ? 'active' : ''} onClick={() => setView('globe')}>Luna, Sol y Tierra</button></div></div>
     <div className="terrain-3d-status"><span>Resultado calculado: Sol {sample.sunVisible ? 'visible' : 'oculto'}</span><span>Tierra {sample.earthVisible ? 'visible' : 'oculta'}</span><span>La imagen 3D ilustra la geometría; no calcula estas ventanas.</span></div>
-    <div className="terrain-quality"><span>Calidad 3D</span><div role="group" aria-label="Calidad del visor 3D"><button className={quality === 'auto' ? 'active' : ''} onClick={() => setQuality('auto')}>Automática</button><button className={quality === 'high' ? 'active' : ''} onClick={() => setQuality('high')}>Alta</button><button className={quality === 'save' ? 'active' : ''} onClick={() => setQuality('save')}>Ahorro</button></div><small>{measuredFps == null ? 'Mueve el visor para medir FPS' : `${measuredFps} FPS${adaptiveLow.current ? ' · resolución reducida' : ''}`}{perfTelemetry ? ` · ${perfTelemetry.assetTier} (${perfTelemetry.loadMs} ms · ${perfTelemetry.tris.toLocaleString()} tris${perfTelemetry.heapMb != null ? ` · ${perfTelemetry.heapMb} MB Heap` : ''})` : ''}</small></div>
+    <div className="terrain-quality"><span>Calidad 3D</span><div role="group" aria-label="Calidad del visor 3D"><button className={quality === 'auto' ? 'active' : ''} onClick={() => setQuality('auto')}>Automática</button><button className={quality === 'high' ? 'active' : ''} onClick={() => setQuality('high')}>Alta</button><button className={quality === 'save' ? 'active' : ''} onClick={() => setQuality('save')}>Ahorro</button></div><small>{measuredFps == null ? 'Mueve el visor para medir FPS' : `${measuredFps} FPS${adaptiveLow.current ? ' · resolución reducida' : ''}`}{perfTelemetry ? ` · ${perfTelemetry.assetTier} (${perfTelemetry.loadMs} ms · ${perfTelemetry.tris.toLocaleString()} tris${perfTelemetry.heapMb != null ? ` · ${perfTelemetry.heapMb} MB Heap` : ''})` : ''}</small><button type="button" onClick={downloadTelemetry} disabled={measuredFps == null} title="Guarda los datos de rendimiento de este dispositivo sin enviarlos a un servidor">Descargar diagnóstico 3D</button></div>
     {view === 'globe' && <><div className="body-explorer" role="group" aria-label="Explorar cuerpos celestes">
       <button className={focus === 'moon' ? 'active' : ''} onClick={() => setFocus('moon')}><strong>Luna · sitio</strong><span>Enfocar {site.name}</span></button>
       <button className={focus === 'sun' ? 'active' : ''} onClick={() => setFocus('sun')}><strong>Sol · energía</strong><span>{sample.sunVisible ? 'Visible' : 'Oculto'} · {sample.sunElevation.toFixed(1)}°</span></button>

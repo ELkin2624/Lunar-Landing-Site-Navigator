@@ -80,6 +80,7 @@ export async function analyze(site: Site, date: string, signal?: AbortSignal, op
       demVerticalSigmaM: spatial.dem_vertical_sigma_m == null ? undefined : Number(spatial.dem_vertical_sigma_m),
       landingDispersionSigma: spatial.landing_dispersion_sigma == null ? undefined : Number(spatial.landing_dispersion_sigma),
       horizonEnvelopeDeg: spatial.horizon_envelope_deg == null ? undefined : Number(spatial.horizon_envelope_deg),
+      confidenceCalibrated: Boolean(spatial.confidence_calibrated),
       method: String(spatial.method),
     } : undefined
     const rawEvents = Array.isArray(metadata.events) ? metadata.events : []
@@ -127,6 +128,69 @@ export type SlopeResult = {
 }
 
 export const apiEnabled = useApi
+
+export type DataAvailability = { analysisReady: boolean; dem240m: boolean; dem20m: boolean; nacStereoProducts: string[]; horizonsStatus: string }
+export async function fetchDataAvailability(signal?: AbortSignal): Promise<DataAvailability> {
+  const response = await fetch(`${base}/api/v1/data/availability`, { signal })
+  if (!response.ok) throw new Error(`Estado de datos: HTTP ${response.status}`)
+  const value = await response.json()
+  return { analysisReady: Boolean(value.analysis_ready), dem240m: Boolean(value.dem_240m),
+    dem20m: Boolean(value.dem_20m), nacStereoProducts: Array.isArray(value.nac_stereo_products) ? value.nac_stereo_products : [],
+    horizonsStatus: String(value.horizons_status) }
+}
+
+export type FootprintResult = {
+  status: 'unknown' | 'measured_not_certified'
+  source: string | null
+  resolutionM: number | null
+  footprintM: number
+  coverageFraction: number
+  sampleCount: number
+  slopeDeg: number | null
+  roughnessRmsM: number | null
+  residualPeakM: number | null
+  slopeExceedsLimit: boolean | null
+  roughnessExceedsLimit: boolean | null
+  rockHazards: string
+  note: string
+}
+
+export async function fetchFootprint(site: Site, footprintM: number, slopeLimitDeg: number, roughnessLimitM: number, signal?: AbortSignal): Promise<FootprintResult> {
+  const response = await fetch(`${base}/api/v1/terrain/footprint`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
+    body: JSON.stringify({ site: { latitude_deg: site.lat, longitude_deg: site.lon }, footprint_m: footprintM,
+      slope_limit_deg: slopeLimitDeg, roughness_limit_m: roughnessLimitM }),
+  })
+  if (!response.ok) throw new Error(`DTM NAC: HTTP ${response.status}`)
+  const data = await response.json()
+  return {
+    status: data.status, source: data.source, resolutionM: data.resolution_m, footprintM: data.footprint_m,
+    coverageFraction: data.coverage_fraction, sampleCount: data.sample_count, slopeDeg: data.slope_deg,
+    roughnessRmsM: data.roughness_rms_m, residualPeakM: data.residual_peak_m,
+    slopeExceedsLimit: data.slope_exceeds_limit, roughnessExceedsLimit: data.roughness_exceeds_limit,
+    rockHazards: data.rock_hazards, note: data.note,
+  }
+}
+
+export type LinkBudgetInput = { frequencyGhz: number; rangeKm: number; spacecraftEirpDbw: number; groundStationGtDbk: number;
+  targetRateMbps: number; otherLossesDb: number; requiredEbn0Db: number; implementationLossDb: number }
+export type LinkBudgetResult = { freeSpaceLossDb: number; cn0Dbhz: number; ebn0Db: number; marginDb: number;
+  maxRateMbpsAtRequiredMargin: number; targetRateSupported: boolean; note: string }
+
+export async function fetchLinkBudget(input: LinkBudgetInput, signal?: AbortSignal): Promise<LinkBudgetResult> {
+  const response = await fetch(`${base}/api/v1/comms/link-budget`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
+    body: JSON.stringify({ frequency_ghz: input.frequencyGhz, range_km: input.rangeKm,
+      spacecraft_eirp_dbw: input.spacecraftEirpDbw, ground_station_gt_dbk: input.groundStationGtDbk,
+      target_rate_mbps: input.targetRateMbps, other_losses_db: input.otherLossesDb,
+      required_ebn0_db: input.requiredEbn0Db, implementation_loss_db: input.implementationLossDb }),
+  })
+  if (!response.ok) throw new Error(`Presupuesto de enlace: HTTP ${response.status}`)
+  const data = await response.json()
+  return { freeSpaceLossDb: data.free_space_loss_db, cn0Dbhz: data.cn0_dbhz, ebn0Db: data.ebn0_db,
+    marginDb: data.margin_db, maxRateMbpsAtRequiredMargin: data.max_rate_mbps_at_required_margin,
+    targetRateSupported: data.target_rate_supported, note: data.note }
+}
 
 export type IlluminationLevel = 'favorable' | 'partial' | 'minimal' | 'none'
 export type IlluminationDay = {
