@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BatteryCharging, Check, ChevronRight, CircleHelp, Clock3, Compass, Download, Earth, Gauge, GitCompareArrows, Layers3, MapPin, Menu, Moon, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Sun, X, Zap } from 'lucide-react'
-import { analyze, apiEnabled, askCopilot, exportScenarioCsv, fetchMissionDelta, fetchRankedSites, fetchSlope, parseNaturalConstraints, type CopilotAskResult, type MissionDeltaResponse, type RankingResult, type SlopeResult } from './api'
-import { SITES, chartPath, computePowerProfile, emptyScenario, formatHour, metrics, verdict, type PowerConfig, type Scenario, type Site } from './data'
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BatteryCharging, Check, ChevronRight, CircleHelp, Clock3, Compass, Download, Earth, Gauge, GitCompareArrows, Layers3, MapPin, Menu, Moon, Play, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Sun, Wifi, X, Zap } from 'lucide-react'
+import { analyze, apiEnabled, askCopilot, exportScenarioCsv, fetchMissionDelta, fetchRankedSites, fetchSlope, parseNaturalConstraints, simulateCommsApi, type CopilotAskResult, type MissionDeltaResponse, type RankingResult, type SlopeResult } from './api'
+import { COMMS_PRESETS, SITES, chartPath, computeCommsProfile, computePowerProfile, emptyScenario, formatHour, metrics, verdict, type CommsConfig, type PowerConfig, type Scenario, type Site } from './data'
 import { coordinatesFromPolarMeters, isWithinPolarMap, polarMapCoordinates, polarMapPosition, polarMeters } from './polar'
 import { LocalTileMap } from './LocalTileMap'
 const Terrain3D = lazy(() => import('./Terrain3D').then(module => ({ default: module.Terrain3D })))
@@ -241,14 +241,18 @@ function MetricCard({ icon, label, value, suffix, color, detail, badge }: { icon
 }
 
 function MissionOperationsDeck({
-  scenario, date, hour, onHourChange, minSun, minEarth, maxBlackout, slope, onPickCoordinate, onApplyConstraints,
+  scenario, date, hour, onHourChange, minSun, minEarth, maxBlackout, slope, onPickCoordinate, onApplyConstraints, externalTab,
 }: {
   scenario: Scenario; date: string; hour: number; onHourChange: (h: number) => void
   minSun: number; minEarth: number; maxBlackout: number; slope: SlopeResult | null
   onPickCoordinate: (lat: number, lon: number) => void
   onApplyConstraints: (c: { minSunPercent?: number; minEarthPercent?: number; maxBlackoutHours?: number }) => void
+  externalTab?: 'power' | 'comms' | 'delta' | 'copilot' | null
 }) {
-  const [deckTab, setDeckTab] = useState<'power' | 'delta' | 'copilot'>('power')
+  const [deckTab, setDeckTab] = useState<'power' | 'comms' | 'delta' | 'copilot'>('power')
+  useEffect(() => {
+    if (externalTab) setDeckTab(externalTab)
+  }, [externalTab])
 
   // --- Power & Battery state ---
   const [presetKey, setPresetKey] = useState<string>('viper')
@@ -259,6 +263,35 @@ function MissionOperationsDeck({
   }
   const powerResult = useMemo(() => computePowerProfile(scenario, powerConfig), [scenario, powerConfig])
   const currentPowerStep = powerResult.steps[Math.min(hour, Math.max(0, powerResult.steps.length - 1))]
+
+  // --- Comms & Data Downlink state ---
+  const [commsPresetKey, setCommsPresetKey] = useState<string>('xband_lander')
+  const [commsConfig, setCommsConfig] = useState<CommsConfig>(COMMS_PRESETS.xband_lander.config)
+  const [commsApiSynced, setCommsApiSynced] = useState(false)
+  const selectCommsPreset = (key: string) => {
+    setCommsPresetKey(key)
+    setCommsConfig(COMMS_PRESETS[key].config)
+  }
+  const commsResult = useMemo(() => computeCommsProfile(scenario, commsConfig), [scenario, commsConfig])
+  const currentCommsStep = commsResult.steps[Math.min(hour, Math.max(0, commsResult.steps.length - 1))]
+
+  useEffect(() => {
+    if (deckTab !== 'comms' || !apiEnabled || scenario.source !== 'api') {
+      setCommsApiSynced(false)
+      return
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      simulateCommsApi(scenario.site, date, commsConfig, {
+        hours: scenario.hours,
+        stepMinutes: scenario.stepMinutes,
+        refineTransitions: scenario.refineTransitions,
+      }, controller.signal)
+        .then(() => { if (!controller.signal.aborted) setCommsApiSynced(true) })
+        .catch(() => { if (!controller.signal.aborted) setCommsApiSynced(false) })
+    }, 260)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [deckTab, scenario.site, scenario.source, scenario.hours, scenario.stepMinutes, scenario.refineTransitions, date, commsConfig])
 
   // --- Mission Delta state ---
   const [delayDays, setDelayDays] = useState(0)
@@ -354,6 +387,9 @@ function MissionOperationsDeck({
         <button type="button" role="tab" aria-selected={deckTab === 'power'} className={deckTab === 'power' ? 'active' : ''} onClick={() => setDeckTab('power')}>
           <BatteryCharging size={15}/> Energía y Batería <span className={`ops-badge ${powerResult.survivesMission ? (powerResult.criticalThresholdBreached ? 'warn' : 'ok') : 'crit'}`}>{powerResult.minSocPercent.toFixed(0)}% mín</span>
         </button>
+        <button type="button" role="tab" aria-selected={deckTab === 'comms'} className={deckTab === 'comms' ? 'active' : ''} onClick={() => setDeckTab('comms')}>
+          <Wifi size={15}/> Enlace DSN / Datos <span className={`ops-badge ${commsResult.commsViable ? 'ok' : commsResult.totalDroppedGb > 0 ? 'crit' : 'warn'}`}>{commsResult.totalDownlinkedGb.toFixed(0)} GB</span>
+        </button>
         <button type="button" role="tab" aria-selected={deckTab === 'delta'} className={deckTab === 'delta' ? 'active' : ''} onClick={() => setDeckTab('delta')}>
           <GitCompareArrows size={15}/> Mission Delta (Desvío / Retraso)
         </button>
@@ -424,6 +460,70 @@ function MissionOperationsDeck({
           </svg>
         </div>
         <p className="power-caption">{powerResult.summary} Modelo preliminar con panel vertical orientado al Sol (1361 W/m², eficiencia {(powerConfig.panelEfficiency * 100).toFixed(0)}%) y fracción visible del disco solar.</p>
+      </div>
+    </div>}
+
+    {deckTab === 'comms' && <div className="ops-tab-body power-grid">
+      <div className="power-controls">
+        <div className="preset-bar" role="group" aria-label="Perfiles de radioenlace">
+          {Object.entries(COMMS_PRESETS).map(([key, item]) => (
+            <button key={key} type="button" className={commsPresetKey === key ? 'active' : ''} onClick={() => selectCommsPreset(key)}>
+              <strong>{item.name}</strong>
+              <span>{item.tag}</span>
+            </button>
+          ))}
+        </div>
+        <div className="power-sliders">
+          <label>
+            <span>Tasa pico DSN (Banda {commsConfig.band}) <strong>{commsConfig.peakDownlinkMbps} Mbps</strong></span>
+            <input type="range" min="1" max="100" step="0.5" value={commsConfig.peakDownlinkMbps} onChange={e => { setCommsPresetKey('custom'); setCommsConfig(c => ({ ...c, peakDownlinkMbps: Number(e.target.value) })) }}/>
+          </label>
+          <label>
+            <span>Ciencia generada / día <strong>{commsConfig.dailyDataGenerationGb} GB/d</strong></span>
+            <input type="range" min="1" max="120" step="1" value={commsConfig.dailyDataGenerationGb} onChange={e => { setCommsPresetKey('custom'); setCommsConfig(c => ({ ...c, dailyDataGenerationGb: Number(e.target.value) })) }}/>
+          </label>
+          <label>
+            <span>Grabadora SSR / despeje <strong>{commsConfig.bufferCapacityGb} GB · ≥{commsConfig.minGrazingDeg}°</strong></span>
+            <input type="range" min="4" max="256" step="4" value={commsConfig.bufferCapacityGb} onChange={e => { setCommsPresetKey('custom'); setCommsConfig(c => ({ ...c, bufferCapacityGb: Number(e.target.value) })) }}/>
+          </label>
+        </div>
+        <div className="power-kpis">
+          <div><small>VIABILIDAD ENLACE</small><strong className={commsResult.commsViable ? 'txt-ok' : commsResult.totalDroppedGb > 0 ? 'txt-crit' : 'txt-warn'}>{commsResult.commsViable ? 'Retorno Nominal' : commsResult.totalDroppedGb > 0 ? 'Pérdida de Datos' : 'SSR en Margen'}</strong></div>
+          <div><small>BAJADA / GENERADO</small><strong>{commsResult.totalDownlinkedGb} / {commsResult.totalGeneratedGb} GB</strong></div>
+          <div><small>PICO BUFFER SSR</small><strong>{commsResult.peakBufferGb} GB <small>({commsResult.peakBufferPercent}%)</small></strong></div>
+          <div><small>TASA MEDIA / NOMINAL</small><strong>{commsResult.averageEffectiveMbps} Mbps · {commsResult.nominalLinkPercent}%</strong></div>
+        </div>
+      </div>
+
+      <div className="power-chart-box">
+        <div className="power-chart-head">
+          <span>COLA SSR (%) Y TASA EFECTIVA · H+{(currentCommsStep?.hour ?? 0).toFixed(1)}h {commsApiSynced ? '· API OK' : ''}</span>
+          {currentCommsStep && <span className="power-instant">Tasa: <strong>{currentCommsStep.effectiveRateMbps} Mbps</strong> ({currentCommsStep.linkState === 'nominal' ? 'Nominal' : currentCommsStep.linkState === 'degraded' ? `Rasante ${currentCommsStep.clearanceDeg}°` : 'Oculto'}) · SSR: <strong>{currentCommsStep.bufferGb} GB ({currentCommsStep.bufferFillPercent}%)</strong></span>}
+        </div>
+        <div className="power-svg-wrap" onClick={e => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const maxIdx = Math.max(0, commsResult.steps.length - 1)
+          const idx = Math.round(((e.clientX - rect.left) / rect.width) * maxIdx)
+          onHourChange(Math.max(0, Math.min(maxIdx, idx)))
+        }}>
+          <svg viewBox="0 0 600 130" preserveAspectRatio="none" aria-label="Curva de llenado de buffer SSR y tasa efectiva de enlace terrestre">
+            <defs>
+              <linearGradient id="ssrFill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor={commsResult.totalDroppedGb > 0 ? '#f18c8e' : '#7aa7ff'} stopOpacity="0.34"/>
+                <stop offset="100%" stopColor="#142232" stopOpacity="0.04"/>
+              </linearGradient>
+            </defs>
+            <line x1="0" x2="600" y1={124 - 0.85 * 114} y2={124 - 0.85 * 114} stroke="#e5a95c" strokeDasharray="4 4" strokeWidth="1"/>
+            <text x="6" y={120 - 0.85 * 114} fill="#e5a95c" fontSize="9">Alerta SSR 85%</text>
+            {commsResult.steps.length > 1 && <>
+              <path d={`${chartPath(commsResult.steps.map(s => s.bufferFillPercent), 600, 118, 0, 100)} L600,125 L0,125 Z`} fill="url(#ssrFill)"/>
+              <path d={chartPath(commsResult.steps.map(s => s.bufferFillPercent), 600, 118, 0, 100)} fill="none" stroke={commsResult.totalDroppedGb > 0 ? '#f18c8e' : '#7aa7ff'} strokeWidth="2.1"/>
+              <path d={chartPath(commsResult.steps.map(s => s.effectiveRateMbps), 600, 118, 0, Math.max(1, commsConfig.peakDownlinkMbps))} fill="none" stroke="#7fd5b4" strokeDasharray="3 2" strokeWidth="1.6"/>
+            </>}
+            <line x1={(Math.min(hour, Math.max(1, commsResult.steps.length - 1)) / Math.max(1, commsResult.steps.length - 1)) * 600} x2={(Math.min(hour, Math.max(1, commsResult.steps.length - 1)) / Math.max(1, commsResult.steps.length - 1)) * 600} y1="0" y2="130" stroke="#f0c88d" strokeWidth="1.5"/>
+          </svg>
+        </div>
+        <p className="power-caption">{commsResult.summary} Línea azul: ocupación SSR (%); trazo verde discontinuo: tasa instantánea modulada por fracción de disco terrestre y despeje ≥ {commsConfig.minGrazingDeg}°.</p>
       </div>
     </div>}
 
@@ -618,6 +718,30 @@ function RegionalSlopeCard({ slope, error, baselinePixels, onBaselineChange, thr
   </section>
 }
 
+const shiftDateUtc = (isoDate: string, days: number) => {
+  const t = Date.parse(`${isoDate}T00:00:00Z`)
+  return Number.isNaN(t) ? isoDate : new Date(t + days * 86400000).toISOString().slice(0, 10)
+}
+
+const TOUR_STEPS = [
+  {
+    title: 'Paso 1/4 · Relieve híbrido 20 m + 240 m',
+    desc: 'Cargamos de Gerlache Rim 2 (−88.3° S): usa LOLA 20 m/px en los primeros 5 km y 240 m para crestas lejanas.',
+  },
+  {
+    title: 'Paso 2/4 · Transiciones 5 min e Incertidumbre 3σ',
+    desc: 'Activamos muestreo fino (±2.5 min) y márgenes ±240 m + dispersión vertical 3σ del DEM sobre JPL Horizons.',
+  },
+  {
+    title: 'Paso 3/4 · Energía y Enlace DSN / Datos',
+    desc: 'Evaluamos autonomía solar y capacidad de retorno científico en Banda X/Ka modulada por disco visible terrestre.',
+  },
+  {
+    title: 'Paso 4/4 · Comparación Multi-sitio / Fechas y Ranking',
+    desc: 'Contrastamos 3 candidatos en fechas distintas con detección automática de empates dentro de la tolerancia espacial.',
+  },
+]
+
 export default function App() {
   const [site, setSite] = useState(SITES[0])
   const [customSite, setCustomSite] = useState<Site | null>(null)
@@ -631,6 +755,12 @@ export default function App() {
   const [mode, setMode] = useState<'explorer' | 'analyst'>('explorer')
   const [tab, setTab] = useState<'overview' | 'compare'>('overview')
   const [compareId, setCompareId] = useState(SITES[1].id)
+  const [compareDateB, setCompareDateB] = useState(initialDate)
+  const [compareCEnabled, setCompareCEnabled] = useState(false)
+  const [compareIdC, setCompareIdC] = useState(SITES[2].id)
+  const [compareDateC, setCompareDateC] = useState(() => shiftDateUtc(initialDate, 14))
+  const [tourStep, setTourStep] = useState<number | null>(null)
+  const [deckOverrideTab, setDeckOverrideTab] = useState<'power' | 'comms' | 'delta' | 'copilot' | null>(null)
   const [search, setSearch] = useState('')
   const [minSun, setMinSun] = useState(45)
   const [minEarth, setMinEarth] = useState(60)
@@ -639,6 +769,7 @@ export default function App() {
   const [slopeBaseline, setSlopeBaseline] = useState<1 | 2 | 4>(1)
   const [slope, setSlope] = useState<SlopeResult | null>(null)
   const [comparedSlope, setComparedSlope] = useState<SlopeResult | null>(null)
+  const [comparedSlopeC, setComparedSlopeC] = useState<SlopeResult | null>(null)
   const [slopeError, setSlopeError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -718,16 +849,21 @@ export default function App() {
     })
     return () => controller.abort()
   }, [site, slopeBaseline, slopeThreshold])
-  useEffect(() => { if (compareId === site.id) setCompareId(SITES.find(s => s.id !== site.id)!.id) }, [compareId, site.id])
+  useEffect(() => {
+    if (compareId === site.id && compareDateB === date) {
+      setCompareId(SITES.find(s => s.id !== site.id)!.id)
+    }
+  }, [compareId, compareDateB, date, site.id])
   const m = useMemo(() => metrics(scenario), [scenario])
   const status = verdict(m, minSun, minEarth, maxBlackout)
   const [comparedState, setCompared] = useState<Scenario>(() => emptyScenario(SITES[1], initialDate))
+  const [comparedCState, setComparedC] = useState<Scenario>(() => emptyScenario(SITES[2], initialDate))
   useEffect(() => {
     if (tab !== 'compare') return
     const controller = new AbortController()
-    const comparisonSite = SITES.find(s => s.id === compareId) || SITES[1]
+    const comparisonSite = SITES.find(s => s.id === compareId) || (compareId === customSite?.id && customSite) || SITES[1]
     setCompareError(null)
-    analyze(comparisonSite, date, controller.signal, {
+    analyze(comparisonSite, compareDateB, controller.signal, {
       hours: durationHours,
       stepMinutes,
       refineTransitions,
@@ -737,16 +873,39 @@ export default function App() {
       setCompareError(`No se pudo analizar ${comparisonSite.name}: ${String(error)}`)
     })
     return () => controller.abort()
-  }, [compareId, date, tab, durationHours, stepMinutes, refineTransitions, retry])
+  }, [compareId, compareDateB, customSite, tab, durationHours, stepMinutes, refineTransitions, retry])
   useEffect(() => {
-    if (!apiEnabled || tab !== 'compare') { setComparedSlope(null); return }
+    if (tab !== 'compare' || !compareCEnabled) return
     const controller = new AbortController()
-    const comparisonSite = SITES.find(s => s.id === compareId) || SITES[1]
+    const siteC = SITES.find(s => s.id === compareIdC) || SITES[2]
+    analyze(siteC, compareDateC, controller.signal, {
+      hours: durationHours,
+      stepMinutes,
+      refineTransitions,
+      refinementStepMinutes: 5,
+    }).then(setComparedC).catch(error => {
+      if (controller.signal.aborted) return
+      setCompareError(`No se pudo analizar ${siteC.name}: ${String(error)}`)
+    })
+    return () => controller.abort()
+  }, [compareCEnabled, compareIdC, compareDateC, tab, durationHours, stepMinutes, refineTransitions, retry])
+  useEffect(() => {
+    if (!apiEnabled || tab !== 'compare') { setComparedSlope(null); setComparedSlopeC(null); return }
+    const controller = new AbortController()
+    const comparisonSite = SITES.find(s => s.id === compareId) || (compareId === customSite?.id && customSite) || SITES[1]
     fetchSlope(comparisonSite, slopeBaseline, 1000, slopeThreshold, controller.signal).then(setComparedSlope).catch(() => {
       if (!controller.signal.aborted) setComparedSlope(null)
     })
+    if (compareCEnabled) {
+      const siteC = SITES.find(s => s.id === compareIdC) || SITES[2]
+      fetchSlope(siteC, slopeBaseline, 1000, slopeThreshold, controller.signal).then(setComparedSlopeC).catch(() => {
+        if (!controller.signal.aborted) setComparedSlopeC(null)
+      })
+    } else {
+      setComparedSlopeC(null)
+    }
     return () => controller.abort()
-  }, [compareId, slopeBaseline, slopeThreshold, tab])
+  }, [compareId, compareCEnabled, compareIdC, customSite, slopeBaseline, slopeThreshold, tab])
 
   useEffect(() => {
     if (!apiEnabled || tab !== 'compare') return
@@ -768,10 +927,14 @@ export default function App() {
   }, [tab, date, rankWeights, minSun, minEarth, maxBlackout])
 
   const compared = comparedState
+  const comparedC = comparedCState
   const compareMetrics = metrics(compared)
+  const compareMetricsC = metrics(comparedC)
   const noticeError = apiError || (tab === 'compare' ? compareError : null)
   const primaryReady = scenario.source === 'api' && scenario.site.lat === site.lat && scenario.site.lon === site.lon && scenario.start === date && !loading && !apiError
-  const comparisonReady = tab !== 'compare' || (compared.source === 'api' && compared.site.id === compareId && compared.start === date && !compareError)
+  const comparisonReadyB = compared.source === 'api' && compared.site.id === compareId && compared.start === compareDateB && !compareError
+  const comparisonReadyC = !compareCEnabled || (comparedC.source === 'api' && comparedC.site.id === compareIdC && comparedC.start === compareDateC && !compareError)
+  const comparisonReady = tab !== 'compare' || (comparisonReadyB && comparisonReadyC)
   const ready = primaryReady && comparisonReady
   const analysisLoading = loading || (tab === 'compare' && !comparisonReady && !compareError)
   const filteredSites = SITES.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.region.toLowerCase().includes(search.toLowerCase()))
@@ -779,6 +942,43 @@ export default function App() {
   const currentHourOffset = currentSample ? (currentSample.hourOffset ?? currentSample.hour) : 0
   const spA = scenario.provenance?.spatialUncertainty
   const spB = compared.provenance?.spatialUncertainty
+  const spC = comparedC.provenance?.spatialUncertainty
+  const commsA = useMemo(() => computeCommsProfile(scenario, COMMS_PRESETS.xband_lander.config), [scenario])
+  const commsB = useMemo(() => computeCommsProfile(compared, COMMS_PRESETS.xband_lander.config), [compared])
+  const commsC = useMemo(() => computeCommsProfile(comparedC, COMMS_PRESETS.xband_lander.config), [comparedC])
+
+  const applyTourStep = (stepIdx: number) => {
+    setTourStep(stepIdx)
+    const gerlache = SITES.find(s => s.id === 'gerlache') || SITES[2]
+    const mouton = SITES.find(s => s.id === 'mouton') || SITES[0]
+    const ridge = SITES.find(s => s.id === 'connecting-ridge') || SITES[4]
+    if (stepIdx === 0) {
+      setTab('overview')
+      setDeckOverrideTab('power')
+      setSite(gerlache)
+      setDurationHours(168)
+      setStepMinutes(60)
+      setRefineTransitions(false)
+    } else if (stepIdx === 1) {
+      setTab('overview')
+      setSite(gerlache)
+      setDurationHours(72)
+      setStepMinutes(30)
+      setRefineTransitions(true)
+    } else if (stepIdx === 2) {
+      setTab('overview')
+      setSite(gerlache)
+      setDeckOverrideTab('comms')
+    } else if (stepIdx === 3) {
+      setSite(gerlache)
+      setCompareId(mouton.id)
+      setCompareDateB(date)
+      setCompareCEnabled(true)
+      setCompareIdC(ridge.id)
+      setCompareDateC(shiftDateUtc(date, 14))
+      setTab('compare')
+    }
+  }
 
   // Helper to check if two ranges overlap (avoiding false single winner within spatial uncertainty)
   const rangesOverlap = (rangeA?: number[], rangeB?: number[]) => {
@@ -825,6 +1025,13 @@ export default function App() {
           </div>
           <div className="heading-actions">
             <button
+              type="button"
+              className={`outline-button ${tourStep !== null ? 'active-tour' : ''}`}
+              onClick={() => (tourStep === null ? applyTourStep(0) : setTourStep(null))}
+            >
+              <Play size={15}/> {tourStep === null ? 'Demo Guiada' : 'Cerrar Demo'}
+            </button>
+            <button
               className="outline-button"
               disabled={!primaryReady || csvExporting}
               onClick={async () => {
@@ -843,6 +1050,18 @@ export default function App() {
             <button className="primary-button" onClick={() => setTab(tab === 'overview' ? 'compare' : 'overview')}>{tab === 'overview' ? <Plus size={17}/> : <Compass size={17}/>} {tab === 'overview' ? 'Comparar y Ranking' : 'Volver al explorador'}</button>
           </div>
         </div>
+        {tourStep !== null && <div className="tour-banner" role="region" aria-label="Demostración interactiva guiada">
+          <div className="tour-meta">
+            <span className="tour-kicker">RECORRIDO VERIFICADO · SIN SIMULACIÓN FALSA</span>
+            <strong>{TOUR_STEPS[tourStep].title}</strong>
+            <p>{TOUR_STEPS[tourStep].desc}</p>
+          </div>
+          <div className="tour-actions">
+            <div className="tour-dots" role="tablist" aria-label="Pasos de la demo">{TOUR_STEPS.map((_, idx) => <button key={idx} type="button" className={tourStep === idx ? 'active' : ''} onClick={() => applyTourStep(idx)}>{idx + 1}</button>)}</div>
+            {tourStep < TOUR_STEPS.length - 1 ? <button type="button" className="primary-button compact-btn" onClick={() => applyTourStep(tourStep + 1)}>Siguiente <ArrowRight size={14}/></button> : <button type="button" className="outline-button compact-btn" onClick={() => setTourStep(null)}>Finalizar</button>}
+            <button type="button" className="icon-button" aria-label="Cerrar recorrido" onClick={() => setTourStep(null)}><X size={16}/></button>
+          </div>
+        </div>}
         {noticeError && <div className="notice" role="alert"><span className="notice-icon"><Activity size={16}/></span><span><strong>{noticeError}</strong> Revisa la conexión con FastAPI o JPL Horizons.</span></div>}
         {!ready ? analysisLoading ? <Suspense fallback={<section className="panel data-unavailable" role="status">Calculando {site.name}…</section>}><OrbitalLoading siteName={tab === 'compare' ? `${site.name} y otro sitio` : site.name}/></Suspense> : <section className="panel data-unavailable"><h2>Análisis no disponible</h2><p>{apiError || compareError || 'El mapa y las métricas aparecerán cuando responda la API.'}</p><p>{apiError?.includes('502') ? 'JPL Horizons no respondió a esta consulta. Puedes reintentarla.' : 'Backend: cd backend · .venv\\Scripts\\python -m uvicorn app.main:app --reload'}</p><button className="primary-button" onClick={() => setRetry(value => value + 1)}>Reintentar análisis</button><label>Fecha de inicio (UTC) <input type="date" value={date} onChange={e => selectDate(e.target.value || initialDate)}/></label></section> : tab === 'overview' ? <>
           <div className="workspace-grid">
@@ -865,6 +1084,7 @@ export default function App() {
             scenario={scenario} date={date} hour={hour} onHourChange={setHour}
             minSun={minSun} minEarth={minEarth} maxBlackout={maxBlackout} slope={slope}
             onPickCoordinate={pickCoordinate}
+            externalTab={deckOverrideTab}
             onApplyConstraints={c => {
               if (c.minSunPercent != null) setMinSun(c.minSunPercent)
               if (c.minEarthPercent != null) setMinEarth(c.minEarthPercent)
@@ -876,93 +1096,153 @@ export default function App() {
         </> : <div className="compare-page-stack">
           <div className="compare-layout">
             <section className="panel comparison-panel">
-              <div className="panel-heading"><div><span className="section-kicker">COMPARACIÓN CON INCERTIDUMBRE ESPACIAL</span><h2>Dos sitios bajo la misma ventana temporal</h2></div><span className="period-label"><Clock3 size={14}/> {date} · 7 días · Sensibilidad ±240 m</span></div>
-              <div className="comparison-selectors">
-                <div><label>SITIO A</label><div className="site-select-display"><MapPin size={17}/>{site.name} <small>({scenario.provenance?.terrainSources.join('+')})</small></div></div>
-                <span className="versus">VS</span>
-                <div><label htmlFor="compare-site">SITIO B</label><select id="compare-site" value={compareId} onChange={e => setCompareId(e.target.value)}>{SITES.filter(s => s.id !== site.id).map(s => <option key={s.id} value={s.id}>{s.name} ({s.region})</option>)}</select></div>
+              <div className="panel-heading">
+                <div><span className="section-kicker">COMPARACIÓN MULTIFECHA Y MULTISITIO</span><h2>{compareCEnabled ? 'Tres candidatos lado a lado' : 'Dos candidatos y ventanas independientes'}</h2></div>
+                <div className="compare-head-actions">
+                  <button type="button" className="outline-button compact-btn" onClick={() => { setCompareId(site.id); setCompareDateB(shiftDateUtc(date, 14)) }} title="Evaluar el mismo sitio A dos semanas después (siguiente fase lunar)">Mismo sitio (+14 d)</button>
+                  <button type="button" className="outline-button compact-btn" onClick={() => setCompareCEnabled(v => !v)}>{compareCEnabled ? 'Quitar 3er sitio' : '+ 3er candidato'}</button>
+                </div>
               </div>
-              <div className="comparison-table">
-                <div className="table-head"><span>MÉTRICA Y RANGO (±240 m)</span><strong>{site.name}</strong><strong>{compared.site.name}</strong></div>
+              <div className={`comparison-selectors ${compareCEnabled ? 'three-cols' : ''}`}>
+                <div className="compare-slot">
+                  <label>CANDIDATO A · {date}</label>
+                  <div className="site-select-display"><MapPin size={16}/>{site.name}</div>
+                </div>
+                <div className="compare-slot">
+                  <label htmlFor="compare-site">CANDIDATO B</label>
+                  <div className="compare-slot-inputs">
+                    <select id="compare-site" value={compareId} onChange={e => setCompareId(e.target.value)}>{SITES.map(s => <option key={s.id} value={s.id} disabled={s.id === site.id && compareDateB === date}>{s.name}</option>)}</select>
+                    <input type="date" aria-label="Fecha candidato B" value={compareDateB} onChange={e => setCompareDateB(e.target.value || date)}/>
+                  </div>
+                </div>
+                {compareCEnabled && <div className="compare-slot">
+                  <label htmlFor="compare-site-c">CANDIDATO C</label>
+                  <div className="compare-slot-inputs">
+                    <select id="compare-site-c" value={compareIdC} onChange={e => setCompareIdC(e.target.value)}>{SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                    <input type="date" aria-label="Fecha candidato C" value={compareDateC} onChange={e => setCompareDateC(e.target.value || date)}/>
+                  </div>
+                </div>}
+              </div>
+              <div className={`comparison-table ${compareCEnabled ? 'three-cols' : ''}`}>
+                <div className="table-head">
+                  <span>MÉTRICA E INCERTIDUMBRE</span>
+                  <strong>{site.name} <small className="head-date">{date}</small></strong>
+                  <strong>{compared.site.name} <small className="head-date">{compareDateB}</small></strong>
+                  {compareCEnabled && <strong>{comparedC.site.name} <small className="head-date">{compareDateC}</small></strong>}
+                </div>
                 {[
                   {
                     name: 'Visibilidad solar',
-                    a: `${m.sunPercent}%`, b: `${compareMetrics.sunPercent}%`,
-                    rangeA: spA ? `${spA.sunlitPercentRange[0]}–${spA.sunlitPercentRange[1]}%` : null,
-                    rangeB: spB ? `${spB.sunlitPercentRange[0]}–${spB.sunlitPercentRange[1]}%` : null,
-                    av: m.sunPercent, bv: compareMetrics.sunPercent,
-                    tie: rangesOverlap(spA?.sunlitPercentRange, spB?.sunlitPercentRange),
+                    vals: [`${m.sunPercent}%`, `${compareMetrics.sunPercent}%`, `${compareMetricsC.sunPercent}%`],
+                    ranges: [
+                      spA ? `${spA.sunlitPercentRange[0]}–${spA.sunlitPercentRange[1]}%` : null,
+                      spB ? `${spB.sunlitPercentRange[0]}–${spB.sunlitPercentRange[1]}%` : null,
+                      spC ? `${spC.sunlitPercentRange[0]}–${spC.sunlitPercentRange[1]}%` : null,
+                    ],
+                    nums: [m.sunPercent, compareMetrics.sunPercent, compareMetricsC.sunPercent],
+                    tie: !compareCEnabled && rangesOverlap(spA?.sunlitPercentRange, spB?.sunlitPercentRange),
                   },
                   {
                     name: 'Visibilidad terrestre',
-                    a: `${m.earthPercent}%`, b: `${compareMetrics.earthPercent}%`,
-                    rangeA: spA ? `${spA.earthVisiblePercentRange[0]}–${spA.earthVisiblePercentRange[1]}%` : null,
-                    rangeB: spB ? `${spB.earthVisiblePercentRange[0]}–${spB.earthVisiblePercentRange[1]}%` : null,
-                    av: m.earthPercent, bv: compareMetrics.earthPercent,
-                    tie: rangesOverlap(spA?.earthVisiblePercentRange, spB?.earthVisiblePercentRange),
+                    vals: [`${m.earthPercent}%`, `${compareMetrics.earthPercent}%`, `${compareMetricsC.earthPercent}%`],
+                    ranges: [
+                      spA ? `${spA.earthVisiblePercentRange[0]}–${spA.earthVisiblePercentRange[1]}%` : null,
+                      spB ? `${spB.earthVisiblePercentRange[0]}–${spB.earthVisiblePercentRange[1]}%` : null,
+                      spC ? `${spC.earthVisiblePercentRange[0]}–${spC.earthVisiblePercentRange[1]}%` : null,
+                    ],
+                    nums: [m.earthPercent, compareMetrics.earthPercent, compareMetricsC.earthPercent],
+                    tie: !compareCEnabled && rangesOverlap(spA?.earthVisiblePercentRange, spB?.earthVisiblePercentRange),
                   },
                   {
                     name: 'Oscuridad continua máx',
-                    a: `${m.longestDark} h`, b: `${compareMetrics.longestDark} h`,
-                    rangeA: spA ? `${spA.longestDarknessHoursRange[0]}–${spA.longestDarknessHoursRange[1]} h` : null,
-                    rangeB: spB ? `${spB.longestDarknessHoursRange[0]}–${spB.longestDarknessHoursRange[1]} h` : null,
-                    av: -m.longestDark, bv: -compareMetrics.longestDark,
-                    tie: rangesOverlap(spA?.longestDarknessHoursRange, spB?.longestDarknessHoursRange),
+                    vals: [`${m.longestDark} h`, `${compareMetrics.longestDark} h`, `${compareMetricsC.longestDark} h`],
+                    ranges: [
+                      spA ? `${spA.longestDarknessHoursRange[0]}–${spA.longestDarknessHoursRange[1]} h` : null,
+                      spB ? `${spB.longestDarknessHoursRange[0]}–${spB.longestDarknessHoursRange[1]} h` : null,
+                      spC ? `${spC.longestDarknessHoursRange[0]}–${spC.longestDarknessHoursRange[1]} h` : null,
+                    ],
+                    nums: [-m.longestDark, -compareMetrics.longestDark, -compareMetricsC.longestDark],
+                    tie: !compareCEnabled && rangesOverlap(spA?.longestDarknessHoursRange, spB?.longestDarknessHoursRange),
                   },
                   {
                     name: 'Blackout terrestre máx',
-                    a: `${m.longestBlackout} h`, b: `${compareMetrics.longestBlackout} h`,
-                    rangeA: spA ? `${spA.longestEarthBlackoutHoursRange[0]}–${spA.longestEarthBlackoutHoursRange[1]} h` : null,
-                    rangeB: spB ? `${spB.longestEarthBlackoutHoursRange[0]}–${spB.longestEarthBlackoutHoursRange[1]} h` : null,
-                    av: -m.longestBlackout, bv: -compareMetrics.longestBlackout,
-                    tie: rangesOverlap(spA?.longestEarthBlackoutHoursRange, spB?.longestEarthBlackoutHoursRange),
+                    vals: [`${m.longestBlackout} h`, `${compareMetrics.longestBlackout} h`, `${compareMetricsC.longestBlackout} h`],
+                    ranges: [
+                      spA ? `${spA.longestEarthBlackoutHoursRange[0]}–${spA.longestEarthBlackoutHoursRange[1]} h` : null,
+                      spB ? `${spB.longestEarthBlackoutHoursRange[0]}–${spB.longestEarthBlackoutHoursRange[1]} h` : null,
+                      spC ? `${spC.longestEarthBlackoutHoursRange[0]}–${spC.longestEarthBlackoutHoursRange[1]} h` : null,
+                    ],
+                    nums: [-m.longestBlackout, -compareMetrics.longestBlackout, -compareMetricsC.longestBlackout],
+                    tie: !compareCEnabled && rangesOverlap(spA?.longestEarthBlackoutHoursRange, spB?.longestEarthBlackoutHoursRange),
+                  },
+                  {
+                    name: 'Retorno DSN (Banda X · 10 Mbps)',
+                    vals: [`${commsA.totalDownlinkedGb} GB`, `${commsB.totalDownlinkedGb} GB`, `${commsC.totalDownlinkedGb} GB`],
+                    ranges: [
+                      `SSR pico ${commsA.peakBufferPercent}%`,
+                      `SSR pico ${commsB.peakBufferPercent}%`,
+                      `SSR pico ${commsC.peakBufferPercent}%`,
+                    ],
+                    nums: [commsA.totalDownlinkedGb, commsB.totalDownlinkedGb, commsC.totalDownlinkedGb],
+                    tie: false,
                   },
                   {
                     name: 'Simultaneidad Sol + Tierra',
-                    a: `${m.concurrentPercent}%`, b: `${compareMetrics.concurrentPercent}%`,
-                    rangeA: null, rangeB: null,
-                    av: m.concurrentPercent, bv: compareMetrics.concurrentPercent,
-                    tie: Math.abs(m.concurrentPercent - compareMetrics.concurrentPercent) <= 2,
+                    vals: [`${m.concurrentPercent}%`, `${compareMetrics.concurrentPercent}%`, `${compareMetricsC.concurrentPercent}%`],
+                    ranges: [null, null, null],
+                    nums: [m.concurrentPercent, compareMetrics.concurrentPercent, compareMetricsC.concurrentPercent],
+                    tie: !compareCEnabled && Math.abs(m.concurrentPercent - compareMetrics.concurrentPercent) <= 2,
                   },
                   ...(slope && comparedSlope ? [{
-                    name: `Pendiente regional LOLA (${slope.baselineM.toFixed(0)} m)`,
-                    a: `${slope.slopeDeg.toFixed(2)}°`, b: `${comparedSlope.slopeDeg.toFixed(2)}°`,
-                    rangeA: `P90: ${slope.neighborhood.p90Deg.toFixed(1)}°`,
-                    rangeB: `P90: ${comparedSlope.neighborhood.p90Deg.toFixed(1)}°`,
-                    av: -slope.slopeDeg, bv: -comparedSlope.slopeDeg,
-                    tie: Math.abs(slope.slopeDeg - comparedSlope.slopeDeg) < 1.0,
+                    name: `Pendiente LOLA (${slope.baselineM.toFixed(0)} m)`,
+                    vals: [`${slope.slopeDeg.toFixed(2)}°`, `${comparedSlope.slopeDeg.toFixed(2)}°`, comparedSlopeC ? `${comparedSlopeC.slopeDeg.toFixed(2)}°` : '—'],
+                    ranges: [
+                      `P90: ${slope.neighborhood.p90Deg.toFixed(1)}°`,
+                      `P90: ${comparedSlope.neighborhood.p90Deg.toFixed(1)}°`,
+                      comparedSlopeC ? `P90: ${comparedSlopeC.neighborhood.p90Deg.toFixed(1)}°` : null,
+                    ],
+                    nums: [-slope.slopeDeg, -comparedSlope.slopeDeg, comparedSlopeC ? -comparedSlopeC.slopeDeg : -999],
+                    tie: !compareCEnabled && Math.abs(slope.slopeDeg - comparedSlope.slopeDeg) < 1.0,
                   }] : []),
                   {
-                    name: 'Malla DEM del horizonte',
-                    a: scenario.provenance?.terrainSources.join(' + ') || 'LOLA 240m',
-                    b: compared.provenance?.terrainSources.join(' + ') || 'LOLA 240m',
-                    rangeA: scenario.provenance?.demPixelScaleM ? `Escala mín ${scenario.provenance.demPixelScaleM} m/px` : null,
-                    rangeB: compared.provenance?.demPixelScaleM ? `Escala mín ${compared.provenance.demPixelScaleM} m/px` : null,
-                    av: 0, bv: 0, tie: true,
+                    name: 'DEM e incertidumbre 3σ',
+                    vals: [
+                      scenario.provenance?.terrainSources.join(' + ') || 'LOLA 240m',
+                      compared.provenance?.terrainSources.join(' + ') || 'LOLA 240m',
+                      comparedC.provenance?.terrainSources.join(' + ') || 'LOLA 240m',
+                    ],
+                    ranges: [
+                      spA?.horizonEnvelopeDeg != null ? `σz ${spA.demVerticalSigmaM} m (±${spA.horizonEnvelopeDeg.toFixed(2)}°)` : null,
+                      spB?.horizonEnvelopeDeg != null ? `σz ${spB.demVerticalSigmaM} m (±${spB.horizonEnvelopeDeg.toFixed(2)}°)` : null,
+                      spC?.horizonEnvelopeDeg != null ? `σz ${spC.demVerticalSigmaM} m (±${spC.horizonEnvelopeDeg.toFixed(2)}°)` : null,
+                    ],
+                    nums: [0, 0, 0],
+                    tie: true,
                   },
-                ].map(row => (
-                  <div className="table-row" key={row.name}>
-                    <span>{row.name} {row.tie && row.av !== row.bv && <em className="tie-badge" title="Los rangos de sensibilidad ±240 m se solapan">Empate técnico (±240m)</em>}</span>
-                    <strong className={!row.tie && row.av > row.bv ? 'winner' : ''}>
-                      <div>{row.a} {!row.tie && row.av > row.bv && <ArrowUpRight size={14}/>}</div>
-                      {row.rangeA && <small className="cell-range">Rango: {row.rangeA}</small>}
-                    </strong>
-                    <strong className={!row.tie && row.bv > row.av ? 'winner' : ''}>
-                      <div>{row.b} {!row.tie && row.bv > row.av && <ArrowUpRight size={14}/>}</div>
-                      {row.rangeB && <small className="cell-range">Rango: {row.rangeB}</small>}
-                    </strong>
+                ].map(row => {
+                  const activeNums = compareCEnabled ? row.nums : row.nums.slice(0, 2)
+                  const bestVal = Math.max(...activeNums)
+                  return <div className="table-row" key={row.name}>
+                    <span>{row.name} {row.tie && activeNums[0] !== activeNums[1] && <em className="tie-badge" title="Los rangos ±240 m + 3σ se solapan">Empate técnico (±240m)</em>}</span>
+                    {(compareCEnabled ? [0, 1, 2] : [0, 1]).map(colIdx => {
+                      const isWin = !row.tie && activeNums[colIdx] === bestVal && activeNums.filter(v => v === bestVal).length === 1
+                      return <strong key={colIdx} className={isWin ? 'winner' : ''}>
+                        <div>{row.vals[colIdx]} {isWin && <ArrowUpRight size={14}/>}</div>
+                        {row.ranges[colIdx] && <small className="cell-range">{row.ranges[colIdx]}</small>}
+                      </strong>
+                    })}
                   </div>
-                ))}
+                })}
               </div>
             </section>
             <section className="panel compare-aside">
               <span className="section-kicker">DECISIÓN BAJO INCERTIDUMBRE</span>
-              <h2>Balance entre ambos sitios</h2>
-              <p>Cuando los rangos espaciales (±240 m) se solapan, la diferencia depende del punto exacto de alunizaje y no declara un ganador absoluto.</p>
-              <div className="compare-mini"><span><Sun size={17}/> Ventaja solar</span><strong>{rangesOverlap(spA?.sunlitPercentRange, spB?.sunlitPercentRange) ? 'Solapado en ±240 m' : m.sunPercent >= compareMetrics.sunPercent ? site.name : compared.site.name} <ArrowDownRight size={15}/></strong></div>
-              <div className="compare-mini"><span><Radio size={17}/> Ventaja de comunicación</span><strong>{rangesOverlap(spA?.earthVisiblePercentRange, spB?.earthVisiblePercentRange) ? 'Solapado en ±240 m' : m.earthPercent >= compareMetrics.earthPercent ? site.name : compared.site.name} <ArrowDownRight size={15}/></strong></div>
-              <div className="compare-mini"><span><ShieldCheck size={17}/> Restricciones (luz/enlace)</span><strong>{verdict(m, minSun, minEarth, maxBlackout).count} / 3 vs {verdict(compareMetrics, minSun, minEarth, maxBlackout).count} / 3</strong></div>
-              <button className="primary-button full" onClick={() => selectSite(compared.site)}>Explorar {compared.site.name} <ArrowRight size={16}/></button>
+              <h2>Balance entre candidatos</h2>
+              <p>Las diferencias pequeñas cuyos márgenes espaciales (±240 m + 3σ DEM) se solapan no declaran ganador único.</p>
+              <div className="compare-mini"><span><Sun size={17}/> Ventaja solar</span><strong>{!compareCEnabled && rangesOverlap(spA?.sunlitPercentRange, spB?.sunlitPercentRange) ? 'Solapado en ±240 m' : (compareCEnabled && compareMetricsC.sunPercent >= Math.max(m.sunPercent, compareMetrics.sunPercent) ? `${comparedC.site.name} (${compareDateC})` : m.sunPercent >= compareMetrics.sunPercent ? `${site.name} (${date})` : `${compared.site.name} (${compareDateB})`)} <ArrowDownRight size={15}/></strong></div>
+              <div className="compare-mini"><span><Radio size={17}/> Ventaja enlace</span><strong>{!compareCEnabled && rangesOverlap(spA?.earthVisiblePercentRange, spB?.earthVisiblePercentRange) ? 'Solapado en ±240 m' : (compareCEnabled && compareMetricsC.earthPercent >= Math.max(m.earthPercent, compareMetrics.earthPercent) ? `${comparedC.site.name} (${compareDateC})` : m.earthPercent >= compareMetrics.earthPercent ? `${site.name} (${date})` : `${compared.site.name} (${compareDateB})`)} <ArrowDownRight size={15}/></strong></div>
+              <div className="compare-mini"><span><ShieldCheck size={17}/> Criterios cumplidos</span><strong>{verdict(m, minSun, minEarth, maxBlackout).count}/3 · {verdict(compareMetrics, minSun, minEarth, maxBlackout).count}/3{compareCEnabled ? ` · ${verdict(compareMetricsC, minSun, minEarth, maxBlackout).count}/3` : ''}</strong></div>
+              <button className="primary-button full" onClick={() => { setDate(compareDateB); selectSite(compared.site) }}>Explorar {compared.site.name} ({compareDateB}) <ArrowRight size={16}/></button>
             </section>
           </div>
 

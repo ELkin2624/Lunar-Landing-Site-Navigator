@@ -435,3 +435,34 @@
 [data-theme="light"] .copilot-chat-answer strong{color:#166534}
 [data-theme="light"] .copilot-chat-answer p{color:#1e293b}
 [data-theme="light"] .copilot-chat-answer small{color:#475569}
+
+/* Guided Demo & Multi-Date / 3-Site Compare */
+.outline-button.active-tour{border-color:#e2b77a;color:#f3cb8f;background:rgba(226,183,122,.1)}
+.tour-banner{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 16px;margin-bottom:16px;background:linear-gradient(90deg,rgba(226,183,122,.12),rgba(122,167,255,.08));border:1px solid #4a5a70;border-radius:10px}
+.tour-meta{display:grid;gap:3px;min-width:260px;flex:1}
+.tour-kicker{font-size:9px;letter-spacing:.14em;color:#f0c686;font-weight:700}
+.tour-meta strong{font-size:13px;color:#edf3f8}
+.tour-meta p{font-size:11px;color:#b2c4d4;margin:0;line-height:1.4}
+.tour-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tour-dots{display:flex;gap:4px}
+.tour-dots button{width:26px;height:26px;border-radius:6px;background:#152231;border:1px solid #2b3f54;color:#9eb3c5;font-size:11px;font-weight:700}
+.tour-dots button.active{background:#e2b77a;border-color:#e2b77a;color:#111924}
+.compare-head-actions{display:flex;gap:8px;flex-wrap:wrap}
+.comparison-selectors.three-cols{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:start}
+.compare-slot{display:grid;gap:6px;min-width:0;align-content:start}
+.compare-slot label{font-size:10px;letter-spacing:.1em;color:#8397a9;font-weight:700}
+.compare-slot-inputs{display:grid;grid-template-columns:1fr;gap:6px;min-width:0}
+.compare-slot-inputs select,.compare-slot-inputs input{height:36px;background:#142231;border:1px solid #2d4257;border-radius:7px;padding:0 10px;color:#e7eff6;font-size:12px;width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.compare-slot .site-select-display{min-height:34px;font-size:12px;padding:6px 10px}
+.comparison-table.three-cols .table-head,.comparison-table.three-cols .table-row{grid-template-columns:1.2fr repeat(3,minmax(0,1fr))}
+.head-date{display:block;font-size:10px;font-weight:400;color:#8fa3b5;font-family:monospace;margin-top:2px}
+@media(max-width:900px){.comparison-selectors.three-cols{grid-template-columns:1fr}.comparison-table.three-cols .table-head,.comparison-table.three-cols .table-row{grid-template-columns:1.1fr repeat(3,minmax(0,1fr));font-size:11px}}
+
+[data-theme="light"] .outline-button.active-tour{border-color:#b45309;color:#b45309;background:#fffbeb}
+[data-theme="light"] .tour-banner{background:linear-gradient(90deg,#fffbeb,#eff6ff);border-color:#cbd5e1}
+[data-theme="light"] .tour-kicker{color:#b45309}
+[data-theme="light"] .tour-meta strong{color:#0f172a}
+[data-theme="light"] .tour-meta p,[data-theme="light"] .head-date,[data-theme="light"] .compare-slot label{color:#475569}
+[data-theme="light"] .tour-dots button{background:#ffffff;border-color:#cbd5e1;color:#334155}
+[data-theme="light"] .tour-dots button.active{background:#b45309;border-color:#b45309;color:#ffffff}
+[data-theme="light"] .compare-slot-inputs select,[data-theme="light"] .compare-slot-inputs input{background:#ffffff;border-color:#cbd5e1;color:#0f172a}

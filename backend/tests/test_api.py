@@ -289,3 +289,51 @@ def test_dense_scan_limit():
                         refine_transitions=True, refinement_step_minutes=1)
     with pytest.raises(ValueError, match="limit is 5000"):
         effective_step_minutes(scenario)
+
+
+def test_comms_simulation_endpoint(monkeypatch, tmp_path):
+    start = datetime(2026, 11, 15, tzinfo=timezone.utc)
+
+    class FakeCommsHorizons:
+        async def positions(self, body_id, site, query_start, query_end, step_minutes):
+            out = []
+            cur = query_start
+            i = 0
+            while cur <= query_end:
+                # Earth visible first half, occulted second half
+                el = 6.0 if (body_id == 399 and i < 12) else (-4.0 if body_id == 399 else 4.0)
+                out.append((cur, 0.0, el))
+                cur += timedelta(minutes=step_minutes)
+                i += 1
+            return out
+
+    monkeypatch.setenv("LUNARPATH_DEM_PATH", str(tmp_path / "not-installed.img"))
+    with TestClient(app) as client:
+        app.state.horizons = FakeCommsHorizons()
+        res = client.post(
+            "/api/v1/simulation/comms",
+            json={
+                "scenario": {
+                    "site": {"latitude_deg": -89.5, "longitude_deg": 0.0, "label": "Test Comms"},
+                    "start_utc": start.isoformat(),
+                    "end_utc": (start + timedelta(hours=24)).isoformat(),
+                    "step_minutes": 60,
+                },
+                "config": {
+                    "band": "X",
+                    "peak_downlink_mbps": 10.0,
+                    "min_grazing_deg": 2.0,
+                    "daily_data_generation_gb": 16.0,
+                    "buffer_capacity_gb": 20.0,
+                },
+            },
+        )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["config"]["band"] == "X"
+    assert len(body["steps"]) == 24
+    assert body["total_generated_gb"] == pytest.approx(16.0, abs=0.1)
+    assert body["total_downlinked_gb"] > 0.0
+    assert body["nominal_link_percent"] == 50.0
+    assert body["comms_viable"] is True
+

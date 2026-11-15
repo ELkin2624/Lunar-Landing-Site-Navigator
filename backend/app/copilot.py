@@ -140,11 +140,22 @@ def diagnose_scenario(result: ScenarioResult, user_query: str | None = None) -> 
                 f"{m.longest_darkness_hours} horas consecutivas de oscuridad. La generación solar cubre el {sun_pct}% del tiempo "
                 f"(simultaneidad Sol+Tierra: {conc_pct}%)."
             )
-        elif "comunicación" in q or "comunicacion" in q or "tierra" in q or "blackout" in q or "enlace" in q:
+        elif (
+            "comunicación" in q
+            or "comunicacion" in q
+            or "tierra" in q
+            or "blackout" in q
+            or "enlace" in q
+            or "datos" in q
+            or "mbps" in q
+            or "banda" in q
+            or "dsn" in q
+            or "ssr" in q
+        ):
             direct_answer = (
                 f"La comunicación directa con la Tierra está disponible el {earth_pct}% del tiempo, "
-                f"con un blackout continuo máximo de {m.longest_earth_blackout_hours} horas. "
-                f"Horizonte evaluado con {result.horizon_source} ({sources_txt})."
+                f"con un blackout continuo máximo de {m.longest_earth_blackout_hours} horas (simultaneidad Sol+Tierra: {conc_pct}%). "
+                f"En Banda X/Ka, la capacidad de retorno depende de la fracción visible del disco terrestre y del despeje angular sobre el relieve ({sources_txt})."
             )
         elif "incertidumbre" in q or "margen" in q or "error" in q or "240" in q or "sensibilidad" in q:
             sp = result.spatial_uncertainty

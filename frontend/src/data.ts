@@ -50,6 +50,64 @@ export type PowerSimulationResult = {
   steps: PowerStep[]
 }
 
+export type CommsBand = 'S' | 'X' | 'Ka'
+
+export type CommsConfig = {
+  band: CommsBand
+  peakDownlinkMbps: number
+  minGrazingDeg: number
+  dailyDataGenerationGb: number
+  bufferCapacityGb: number
+  initialBufferGb: number
+}
+
+export type CommsStep = {
+  hour: number
+  earthVisible: boolean
+  earthDiskFraction: number
+  clearanceDeg: number
+  linkState: 'nominal' | 'degraded' | 'occulted'
+  effectiveRateMbps: number
+  downlinkedGb: number
+  generatedGb: number
+  bufferGb: number
+  bufferFillPercent: number
+  droppedGb: number
+}
+
+export type CommsSimulationResult = {
+  config: CommsConfig
+  commsViable: boolean
+  nominalLinkPercent: number
+  totalGeneratedGb: number
+  totalDownlinkedGb: number
+  totalDroppedGb: number
+  peakBufferGb: number
+  peakBufferPercent: number
+  finalBufferGb: number
+  averageEffectiveMbps: number
+  summary: string
+  steps: CommsStep[]
+}
+
+export const COMMS_PRESETS: Record<string, { name: string; tag: string; config: CommsConfig }> = {
+  xband_lander: {
+    name: 'Lander CLPS (Banda X)',
+    tag: '10 Mbps · 12 GB/d · 32 GB SSR',
+    config: { band: 'X', peakDownlinkMbps: 10, minGrazingDeg: 2.0, dailyDataGenerationGb: 12, bufferCapacityGb: 32, initialBufferGb: 0 },
+  },
+  ka_artemis: {
+    name: 'Base / Hab (Banda Ka)',
+    tag: '45 Mbps · 60 GB/d · 128 GB SSR',
+    config: { band: 'Ka', peakDownlinkMbps: 45, minGrazingDeg: 3.0, dailyDataGenerationGb: 60, bufferCapacityGb: 128, initialBufferGb: 0 },
+  },
+  sband_rover: {
+    name: 'Rover Polar (Banda S)',
+    tag: '2.5 Mbps · 4 GB/d · 16 GB SSR',
+    config: { band: 'S', peakDownlinkMbps: 2.5, minGrazingDeg: 1.5, dailyDataGenerationGb: 4, bufferCapacityGb: 16, initialBufferGb: 0 },
+  },
+}
+
 // Sitios del catálogo polar sur (IAU Gazetteer para centros de estructuras; aproximados para bordes Artemis III).
 export const SITES: Site[] = [
   { id: 'mouton', name: 'Mons Mouton', region: 'Región Artemis III', lat: -84.6, lon: 31.0, note: 'Macizo elevado (~5 km), horizonte amplio', artemis: true, heightKm: 5.0 },
@@ -172,6 +230,107 @@ export function computePowerProfile(scenario: Scenario, config: PowerConfig): Po
     totalEnergyConsumedKwh: Number((totalLoadWh / 1000).toFixed(2)),
     criticalThresholdBreached: breached,
     blackoutHoursSupported: maxAutonomyHours,
+    summary,
+    steps,
+  }
+}
+
+export function computeCommsProfile(scenario: Scenario, config: CommsConfig): CommsSimulationResult {
+  const samples = scenario.samples
+  if (!samples.length) {
+    return {
+      config, commsViable: false, nominalLinkPercent: 0, totalGeneratedGb: 0,
+      totalDownlinkedGb: 0, totalDroppedGb: 0, peakBufferGb: 0, peakBufferPercent: 0,
+      finalBufferGb: 0, averageEffectiveMbps: 0, summary: 'Sin muestras disponibles.', steps: [],
+    }
+  }
+  const stepMinutes = scenario.provenance?.samplingMinutes || scenario.stepMinutes || 60
+  const fallbackDtHours = stepMinutes / 60
+  let bufferGb = Math.min(config.bufferCapacityGb, Math.max(0, config.initialBufferGb))
+  let peakBufferGb = bufferGb
+  let totalGenGb = 0
+  let totalDownGb = 0
+  let totalDroppedGb = 0
+  let nominalSteps = 0
+  let rateSumMbps = 0
+  const steps: CommsStep[] = []
+
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i]
+    const prevOffset = i > 0 ? (samples[i - 1].hourOffset ?? samples[i - 1].hour) : 0
+    const curOffset = s.hourOffset ?? s.hour
+    const dtHours = i > 0 ? Math.max(1 / 60, curOffset - prevOffset) : fallbackDtHours
+    const genPerStepGb = (config.dailyDataGenerationGb / 24) * dtHours
+    const clearanceDeg = s.earthElevation - s.horizonEarth
+    const diskFrac = s.earthDiskFraction ?? (s.earthVisible ? 1.0 : 0.0)
+
+    let effMbps = 0
+    let linkState: 'nominal' | 'degraded' | 'occulted' = 'occulted'
+    if (s.earthVisible && clearanceDeg > 0) {
+      let linkFactor = 1.0
+      if (clearanceDeg >= config.minGrazingDeg) {
+        linkState = 'nominal'
+        nominalSteps++
+      } else {
+        linkState = 'degraded'
+        linkFactor = Math.max(0.15, clearanceDeg / Math.max(config.minGrazingDeg, 0.1))
+      }
+      effMbps = config.peakDownlinkMbps * diskFrac * linkFactor
+    }
+
+    const capGb = (effMbps * 3600 * dtHours) / 8000
+    const availableGb = bufferGb + genPerStepGb
+    const downlinkedGb = Math.min(availableGb, capGb)
+    const unclampedBuffer = availableGb - downlinkedGb
+    const droppedGb = Math.max(0, unclampedBuffer - config.bufferCapacityGb)
+    bufferGb = Math.min(config.bufferCapacityGb, unclampedBuffer)
+
+    peakBufferGb = Math.max(peakBufferGb, bufferGb)
+    totalGenGb += genPerStepGb
+    totalDownGb += downlinkedGb
+    totalDroppedGb += droppedGb
+    rateSumMbps += effMbps
+
+    const fillPct = (bufferGb / Math.max(0.1, config.bufferCapacityGb)) * 100
+    steps.push({
+      hour: curOffset,
+      earthVisible: s.earthVisible,
+      earthDiskFraction: Number(diskFrac.toFixed(3)),
+      clearanceDeg: Number(clearanceDeg.toFixed(2)),
+      linkState,
+      effectiveRateMbps: Number(effMbps.toFixed(2)),
+      downlinkedGb: Number(downlinkedGb.toFixed(3)),
+      generatedGb: Number(genPerStepGb.toFixed(3)),
+      bufferGb: Number(bufferGb.toFixed(2)),
+      bufferFillPercent: Number(fillPct.toFixed(1)),
+      droppedGb: Number(droppedGb.toFixed(2)),
+    })
+  }
+
+  const peakPct = Number(((peakBufferGb / Math.max(0.1, config.bufferCapacityGb)) * 100).toFixed(1))
+  const nominalPct = Number(((nominalSteps / samples.length) * 100).toFixed(1))
+  const avgMbps = Number((rateSumMbps / samples.length).toFixed(2))
+  const finalGb = steps[steps.length - 1]?.bufferGb ?? 0
+  const commsViable = totalDroppedGb === 0 && peakPct < 90
+
+  let summary = `Retorno de datos viable en Banda ${config.band}: bajada efectiva de ${totalDownGb.toFixed(1)} GB (media ${avgMbps} Mbps, pico SSR ${peakPct}%).`
+  if (totalDroppedGb > 0) {
+    summary = `Desbordamiento de grabadora en Banda ${config.band}: se pierden ${totalDroppedGb.toFixed(2)} GB durante apagones terrestres. Aumenta SSR o Mbps.`
+  } else if (peakPct >= 80) {
+    summary = `Enlace en margen ajustado (Banda ${config.band}): cola alcanza ${peakBufferGb.toFixed(1)} GB (${peakPct}% del SSR); conviene relé lunar.`
+  }
+
+  return {
+    config,
+    commsViable,
+    nominalLinkPercent: nominalPct,
+    totalGeneratedGb: Number(totalGenGb.toFixed(2)),
+    totalDownlinkedGb: Number(totalDownGb.toFixed(2)),
+    totalDroppedGb: Number(totalDroppedGb.toFixed(2)),
+    peakBufferGb: Number(peakBufferGb.toFixed(2)),
+    peakBufferPercent: peakPct,
+    finalBufferGb: Number(finalGb.toFixed(2)),
+    averageEffectiveMbps: avgMbps,
     summary,
     steps,
   }

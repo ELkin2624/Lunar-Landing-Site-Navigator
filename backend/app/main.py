@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from .analysis import analyze, apply_refined_events, build_timeline, position
 from .cache import EphemerisCache
 from .catalog import CatalogSite, find_site, list_sites
+from .comms import CommsSimulationRequest, CommsSimulationResult, simulate_comms
 from .copilot import CopilotRequest, CopilotResponse, diagnose_scenario, parse_natural_constraints
 from .delta import MissionDeltaRequest, MissionDeltaResult, compute_mission_delta, shift_lunar_coordinates
 from .horizons import HorizonsClient, HorizonsError
@@ -597,6 +598,12 @@ def copilot_parse_constraints(payload: dict[str, str]) -> Constraints:
 async def simulate_mission_power(payload: PowerSimulationRequest, request: Request) -> PowerSimulationResult:
     result = await evaluate(payload.scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
     return simulate_power(result, payload.config)
+
+
+@app.post("/api/v1/simulation/comms", response_model=CommsSimulationResult, tags=["Simulation"])
+async def simulate_mission_comms(payload: CommsSimulationRequest, request: Request) -> CommsSimulationResult:
+    result = await evaluate(payload.scenario, request.app.state.horizons, request.app.state.dem, request.app.state.fine_dem)
+    return simulate_comms(result, payload.config)
 
 
 # ---------------------------------------------------------------------------

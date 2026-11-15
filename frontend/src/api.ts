@@ -1,4 +1,4 @@
-import { type Scenario, type Site, type Sample, type HorizonPoint, type Provenance, type SpatialUncertainty, type TimelineEventItem } from './data'
+import { type CommsConfig, type CommsSimulationResult, type Scenario, type Site, type Sample, type HorizonPoint, type Provenance, type SpatialUncertainty, type TimelineEventItem } from './data'
 
 const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const useApi = import.meta.env.VITE_USE_API !== 'false'
@@ -486,4 +486,50 @@ export async function exportScenarioCsv(
   })
   if (!response.ok) throw new Error(`CSV HTTP ${response.status}`)
   return response.blob()
+}
+
+export async function simulateCommsApi(
+  site: Site,
+  date: string,
+  config: CommsConfig,
+  options: {
+    hours?: number
+    stepMinutes?: number
+    refineTransitions?: boolean
+  } = {},
+  signal?: AbortSignal,
+): Promise<CommsSimulationResult> {
+  if (!useApi) throw new Error('La simulación de comunicaciones requiere el backend activo')
+  const response = await fetch(`${base}/api/v1/simulation/comms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal,
+    body: JSON.stringify({
+      scenario: buildScenarioPayload(site, date, options),
+      config: {
+        band: config.band,
+        peak_downlink_mbps: config.peakDownlinkMbps,
+        min_grazing_deg: config.minGrazingDeg,
+        daily_data_generation_gb: config.dailyDataGenerationGb,
+        buffer_capacity_gb: config.bufferCapacityGb,
+        initial_buffer_gb: config.initialBufferGb,
+      },
+    }),
+  })
+  if (!response.ok) throw new Error(`Comms HTTP ${response.status}`)
+  const d = await response.json() as Record<string, any>
+  return {
+    config,
+    commsViable: Boolean(d.comms_viable),
+    nominalLinkPercent: Number(d.nominal_link_percent ?? 0),
+    totalGeneratedGb: Number(d.total_generated_gb ?? 0),
+    totalDownlinkedGb: Number(d.total_downlinked_gb ?? 0),
+    totalDroppedGb: Number(d.total_dropped_gb ?? 0),
+    peakBufferGb: Number(d.peak_buffer_gb ?? 0),
+    peakBufferPercent: Number(d.peak_buffer_percent ?? 0),
+    finalBufferGb: Number(d.final_buffer_gb ?? 0),
+    averageEffectiveMbps: Number(d.average_effective_mbps ?? 0),
+    summary: String(d.summary ?? ''),
+    steps: [],
+  }
 }
