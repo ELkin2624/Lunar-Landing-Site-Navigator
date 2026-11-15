@@ -10,11 +10,10 @@ export function EducationView({ onExplore }: { onExplore: () => void }) {
     <div className="education-backdrop" role="group" aria-label="Vista ilustrativa de la Luna en el espacio">
       <div className="education-moon" aria-hidden="true"/>
       <Suspense fallback={null}><EducationMoon/></Suspense>
-      <span className="education-vitrine-caption">LUNA · VISTA ILUSTRATIVA</span>
+      <span className="education-vitrine-caption">Luna: color LROC y relieve LOLA (NASA SVS) · Estrellas del catálogo Hipparcos · Iluminación ilustrativa</span>
     </div>
     <section className="education-hero">
       <div className="education-intro">
-        <span className="education-kicker">DIVULGACIÓN CIENTÍFICA Y MUSEOS</span>
         <h1>Explora el Polo Sur <em>de la Luna</em></h1>
         <p>Descubre cuándo y dónde hay luz solar y visibilidad de la Tierra para planificar una misión simulada, sin necesidad de ser experto.</p>
         <div className="education-cta-row">
@@ -24,7 +23,6 @@ export function EducationView({ onExplore }: { onExplore: () => void }) {
       </div>
     </section>
     <section className="education-steps" aria-labelledby="education-steps-title">
-      <span className="education-kicker">APRENDIZAJE INTUITIVO</span>
       <h2 id="education-steps-title">¿Cómo se planifica una misión lunar?</h2>
       <p>Tres pasos para comenzar a explorar las condiciones del terreno polar lunar.</p>
       <div className="education-step-grid">

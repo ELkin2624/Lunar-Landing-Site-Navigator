@@ -30,7 +30,7 @@ export function OrbitalView() {
   return <div className="planning-orbit-viewer" ref={viewer}>
     <iframe
       className="planning-orbit-frame"
-      src={import.meta.env.BASE_URL + 'sistema-solar.html'}
+      src={import.meta.env.BASE_URL + 'sistema-solar.html?focus=moon'}
       title="Sistema solar interactivo: Sol, Tierra y Luna"
     />
     {document.fullscreenEnabled && <button type="button" className="planning-orbit-fullscreen" onClick={toggleFullscreen}>

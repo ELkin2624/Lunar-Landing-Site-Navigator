@@ -29,8 +29,9 @@ function HorizonProfile({ scenario, index }: { scenario: Scenario; index: number
   const y = (elevation: number) => 210 - (elevation - low) / (high - low) * 180
   const points = [...profile, { azimuth: 360, elevation: profile[0].elevation }]
   const line = points.map((point, i) => `${i ? 'L' : 'M'}${x(point.azimuth).toFixed(1)} ${y(point.elevation).toFixed(1)}`).join(' ')
+
   return <div className="detail-chart">
-    <svg viewBox="0 0 800 250" role="img" aria-label="Silueta del terreno con posiciones del Sol y la Tierra">
+    <svg viewBox="0 0 800 250" role="img" aria-label="Perfil del horizonte local de 360 grados con posiciones del Sol y la Tierra">
       <line x1="0" x2="800" y1={y(0)} y2={y(0)} stroke="#a8b8cb" strokeDasharray="5 5"/>
       <path d={`${line} L800 250 L0 250 Z`} fill="#aab9ca"/>
       <path d={line} fill="none" stroke="#526d89" strokeWidth="2"/>
@@ -38,9 +39,11 @@ function HorizonProfile({ scenario, index }: { scenario: Scenario; index: number
       <circle cx={x(sample.earthAzimuth ?? 0)} cy={y(sample.earthElevation)} r="7" fill="#2865ca" opacity={sample.earthVisible ? 1 : .4}/>
       {['N', 'E', 'S', 'O', 'N'].map((label, i) => <text key={i} x={Math.max(5, Math.min(785, i * 200))} y="242" fontSize="11" fill="#263e57">{label}</text>)}
     </svg>
-    <div className="detail-legend"><span><i className="sun"/> Sol {sample.sunVisible ? 'a la vista' : 'oculto'}</span>
-      <span><i className="earth"/> Tierra {sample.earthVisible ? 'a la vista' : 'oculta'}</span>
-      <span><i className="terrain"/> Montañas y bordes de cráter</span></div>
+    <div className="detail-legend">
+      <span><i className="sun"/> Sol {sample.sunVisible ? (sample.sunElevation < 0 ? 'parcialmente visible' : 'visible') : 'oculto'} · {sample.sunElevation.toFixed(1)}° de elevación</span>
+      <span><i className="earth"/> Tierra {sample.earthVisible ? (sample.earthElevation < 0 ? 'parcialmente visible' : 'visible') : 'oculta'} · {sample.earthElevation.toFixed(1)}° de elevación</span>
+      <span><i className="terrain"/> Horizonte LOLA</span>
+    </div>
   </div>
 }
 
@@ -52,7 +55,8 @@ export function MissionDetailView({ scenario, onCompare, onPlan, hasComparison =
 }) {
   const [index, setIndex] = useState(0)
   if (!scenario || !scenario.samples.length) return <section className="detail-view detail-empty">
-    <span className="detail-kicker">DETALLE DE UN LUGAR</span><h1>Explora el detalle de un lugar</h1>
+    <span className="detail-kicker">DETALLE Y CONCLUSIÓN</span>
+    <h1>Explora el detalle de un lugar</h1>
     <p>Elige un lugar desde la comparación para ver cuándo hay luz y vista a la Tierra.</p>
     <button className="detail-primary" onClick={onPlan}>Configurar misión <ArrowRight size={16}/></button>
   </section>
@@ -71,35 +75,46 @@ export function MissionDetailView({ scenario, onCompare, onPlan, hasComparison =
 
   return <div className="detail-view">
     <button className="detail-back" onClick={onCompare}><ArrowLeft size={16}/> {hasComparison ? 'Volver a la comparación' : 'Elegir lugares para comparar'}</button>
-    <div className="detail-heading"><span className="detail-kicker">EXPLORA LAS CONDICIONES HORA POR HORA</span>
+    <div className="detail-heading">
+      <span className="detail-kicker">EXPLORA LAS CONDICIONES HORA POR HORA · {scenario.start} UTC</span>
       <h1>{scenario.site.name.replace('(fondo PSR)', '(cráter en sombra)')}</h1>
       <p>{scenario.site.note} · {Math.abs(scenario.site.lat).toFixed(3)}° S · {Math.abs(scenario.site.lon).toFixed(3)}° {scenario.site.lon < 0 ? 'O' : 'E'}</p>
     </div>
 
-    <section className="detail-panel"><span className="detail-kicker">LO QUE VES DESDE ESTE LUGAR</span>
+    <section className="detail-panel">
+      <span className="detail-kicker">HORIZONTE LOCAL</span>
       <h2>¿El terreno tapa el Sol o la Tierra?</h2>
-      <p>La zona gris representa montañas y bordes de cráter. Si el Sol o la Tierra quedan detrás de ella, no se ven desde este lugar.</p>
+      <p>Perfil del terreno LOLA en todas las direcciones y posición de los astros en la hora seleccionada.</p>
       <HorizonProfile scenario={scenario} index={current}/>
       <p className="detail-meaning" aria-live="polite">{explanation}</p>
-      <label className="detail-time">Elige una hora: <strong>{formatHour(scenario.start, sample.hour)}</strong>
+      <label className="detail-time">Hora seleccionada: <strong>{formatHour(scenario.start, sample.hour)}</strong>
         <input type="range" min="0" max={scenario.samples.length - 1} value={current} onChange={e => setIndex(Number(e.target.value))}/>
       </label>
     </section>
 
-    <div className="detail-summary"><div><Sun size={20}/><span>Tiempo con luz solar<strong>{m.sunPercent}%</strong><small>de la semana analizada</small></span></div>
-      <div><Earth size={20}/><span>Tiempo con vista a la Tierra<strong>{m.earthPercent}%</strong><small>posibilidad de enlace directo</small></span></div>
-      <div><Lightbulb size={20}/><span>Tiempo con ambas<strong>{m.concurrentPercent}%</strong><small>luz y vista a la Tierra a la vez</small></span></div></div>
+    <div className="detail-summary">
+      <div><Sun size={20}/><span>Tiempo con luz solar<strong>{m.sunPercent}%</strong><small>del periodo analizado</small></span></div>
+      <div><Earth size={20}/><span>Tiempo con vista a la Tierra<strong>{m.earthPercent}%</strong><small>del periodo analizado</small></span></div>
+      <div><Lightbulb size={20}/><span>Tiempo con ambas<strong>{m.concurrentPercent}%</strong><small>Sol y Tierra a la vez</small></span></div>
+    </div>
 
-    <div className="detail-columns"><section className="detail-panel"><span className="detail-kicker">MOMENTOS FAVORABLES</span>
-      <h2>¿Cuándo coinciden la luz y la Tierra?</h2><p>Estos son los tramos más largos, sin interrupciones, dentro de la semana.</p>
-      {windows.length ? <div className="detail-windows">{windows.map((window, i) => <article key={window.start}>
-        <span>{String(i + 1).padStart(2, '0')}</span><div><strong>{window.end - window.start} horas estimadas</strong>
-          <p>{formatHour(scenario.start, window.start)} — {formatHour(scenario.start, window.end)}</p></div>
-      </article>)}</div> : <p className="detail-muted">No encontramos una hora en que coincidan luz solar y vista a la Tierra. Prueba otra fecha o lugar.</p>}
-    </section><section className="detail-panel"><span className="detail-kicker">QUÉ HACER CON ESTE RESULTADO</span>
-      <h2>Compara antes de elegir</h2><p>Un lugar con más luz puede facilitar el uso de paneles solares. Poder ver la Tierra abre una posibilidad de comunicación directa; aún hay que comprobar el equipo de radio.</p>
-      <details className="detail-method"><summary>¿Cómo se obtuvo esta información?</summary><p>Las posiciones del Sol y la Tierra provienen de JPL Horizons y la forma del terreno de mediciones lunares LOLA. Se revisa una vez por hora, por lo que un cambio breve entre revisiones podría pasar inadvertido. El resultado no certifica la seguridad de un aterrizaje.</p></details>
-      <button className="detail-primary" onClick={onPlan}>Probar otro lugar o fecha <ArrowRight size={16}/></button>
-    </section></div>
+    <div className="detail-columns">
+      <section className="detail-panel">
+        <span className="detail-kicker">VENTANAS DE VISIBILIDAD</span>
+        <h2>Momentos con Sol y Tierra visibles</h2>
+        <p>Los tramos más largos dentro de la semana analizada.</p>
+        {windows.length ? <div className="detail-windows">{windows.map((window, i) => <article key={window.start}>
+          <span>{String(i + 1).padStart(2, '0')}</span><div><strong>{window.end - window.start} horas estimadas</strong>
+            <p>{formatHour(scenario.start, window.start)} — {formatHour(scenario.start, window.end)}</p></div>
+        </article>)}</div> : <p className="detail-muted">No se encontró una ventana simultánea en las muestras de este periodo.</p>}
+      </section>
+      <section className="detail-panel">
+        <span className="detail-kicker">FUENTES Y ALCANCE</span>
+        <h2>¿Cómo calculamos esto?</h2>
+        <p>Combinamos posiciones del Sol y la Tierra de JPL Horizons con un perfil de relieve lunar LOLA para estimar su visibilidad desde el sitio.</p>
+        <div className="detail-note"><Lightbulb size={19}/><p>Las muestras son horarias y las transiciones tienen incertidumbre. La visibilidad terrestre no garantiza comunicación; el análisis regional no certifica un aterrizaje seguro.</p></div>
+        <button className="detail-primary" onClick={onPlan}>Probar otro lugar o fecha <ArrowRight size={16}/></button>
+      </section>
+    </div>
   </div>
 }

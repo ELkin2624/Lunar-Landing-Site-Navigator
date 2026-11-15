@@ -80,7 +80,7 @@ export function IlluminationMoon({ latitude, longitude, sunAzimuthDeg, sunElevat
 
     let disposed = false
     let model: THREE.Object3D | undefined
-    new GLTFLoader().load(import.meta.env.BASE_URL + 'luna/luna_cientifica.glb', ({ scene: lunar }) => {
+    new GLTFLoader().load(import.meta.env.BASE_URL + 'luna/luna_lod.glb', ({ scene: lunar }) => {
       if (disposed) {
         disposeModel(lunar)
         return

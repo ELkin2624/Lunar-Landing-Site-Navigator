@@ -220,3 +220,45 @@ footer { color: var(--muted); }
 @media (max-width: 900px) {
 :root[data-theme='light'] .sidebar { overflow-y: auto; box-shadow: 12px 0 36px #13284729; }
 }
+
+/* Explorer polish: grouped parameter columns, styled NAC footprint card and readable controls in both themes. */
+.controls-panel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; padding: 0 24px 22px; }
+.controls-panel .panel-heading { grid-column: 1 / -1; padding-inline: 0; }
+.controls-panel .param-column { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls-panel .param-column > .field-label { margin: 0; }
+.controls-panel .param-column > .date-input,
+.controls-panel .param-column > .mode-toggle,
+.controls-panel .param-column > .field-hint,
+.controls-panel .param-column > .param-grid { width: 100%; margin: 0; }
+.controls-panel .param-column > .analyst-fields { padding: 4px 0 0; }
+@media (max-width: 900px) {
+  .controls-panel { grid-template-columns: 1fr; gap: 22px; }
+}
+
+.slope-threshold-control, .footprint-control { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.slope-threshold-control > input, .footprint-control > input { flex-basis: 100%; margin-top: 4px; }
+.slope-threshold-control { font-size: 12px; color: #9db0bf; }
+[data-theme="light"] .slope-threshold-control { color: var(--muted); }
+
+.footprint-panel { margin-top: 14px; gap: 14px; padding-bottom: 20px; }
+.footprint-panel .panel-heading { padding-bottom: 0; }
+.footprint-panel > .footprint-control,
+.footprint-panel > .footprint-metrics,
+.footprint-panel > .footprint-status { margin: 0 23px; }
+.footprint-control { font-size: 12px; color: #9db0bf; }
+.footprint-control strong { font-family: 'Space Grotesk', sans-serif; font-size: 18px; color: #ecc384; }
+.footprint-control input { accent-color: #ecc17f; }
+.footprint-status { font-size: 13px; line-height: 1.5; color: #c9d6de; }
+.footprint-panel > .slope-disclaimer { padding: 0 23px; }
+[data-theme="light"] .footprint-control { color: var(--muted); }
+[data-theme="light"] .footprint-control strong { color: var(--brand-blue); }
+[data-theme="light"] .footprint-control input { accent-color: var(--brand-blue); }
+[data-theme="light"] .footprint-status { color: var(--ink); }
+
+.power-sliders label strong { white-space: nowrap; }
+
+[data-theme="light"] .terrain-quality button { background: #ffffff; }
+[data-theme="light"] .terrain-quality button:disabled { color: #8a97a8; cursor: not-allowed; }
+
+/* The active step keeps its fill in the light theme; the generic transparent rule must not erase it. */
+[data-theme='light'] .guided-progress span.active { background: var(--brand-blue); color: #ffffff; }
